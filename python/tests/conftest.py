@@ -21,6 +21,11 @@ def page_html() -> str:
 
 
 @pytest.fixture
+def landing_html() -> str:
+    return read_testdata("landing.html")
+
+
+@pytest.fixture
 def site_map_html() -> str:
     return read_testdata("nettstedskart.html")
 

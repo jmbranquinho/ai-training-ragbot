@@ -50,6 +50,22 @@ public sealed class StavangerHtmlTests
     }
 
     [Fact]
+    public void ParsePage_unwraps_teaser_cards()
+    {
+        var content = StavangerHtml.ParsePage(
+            new Uri($"{Base}/renovasjon-og-miljo/klima/"), TestData.Read("landing.html"), Now).Content;
+
+        // Each card becomes a normal heading + paragraph instead of one big link
+        Assert.Contains("## Hvordan forbereder vi oss på høyere vannstand?\n\nEn ny rapport", content);
+        Assert.Contains("## Best forberedt på et våtere klima\n\nKommunen er kåret", content);
+        Assert.DoesNotContain("[##", content);
+        Assert.DoesNotContain("klimatilpasning-rapport", content); // the card's link target is dropped
+
+        // Ordinary inline links are untouched
+        Assert.Contains("[renovasjon](/renovasjon-og-miljo/)", content);
+    }
+
+    [Fact]
     public void ContentHash_changes_only_when_content_changes()
     {
         var first = StavangerHtml.ParsePage(Url, _pageHtml, Now);

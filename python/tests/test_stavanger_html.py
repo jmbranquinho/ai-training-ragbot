@@ -36,6 +36,18 @@ def test_parse_page_strips_noise(page_html: str) -> None:
         assert noise not in content, noise
 
 
+def test_parse_page_unwraps_teaser_cards(landing_html: str) -> None:
+    content = parse_page(f"{BASE}/renovasjon-og-miljo/klima/", landing_html, fetched_at=NOW).content
+
+    # Each card becomes a normal heading + paragraph instead of one big link
+    assert "## Hvordan forbereder vi oss på høyere vannstand?\n\nEn ny rapport" in content
+    assert "## Best forberedt på et våtere klima\n\nKommunen er kåret" in content
+    assert "[##" not in content
+    assert "klimatilpasning-rapport" not in content  # the card's link target is dropped
+    # Ordinary inline links are untouched
+    assert "[renovasjon](/renovasjon-og-miljo/)" in content
+
+
 def test_content_hash_changes_only_when_content_changes(page_html: str) -> None:
     first = parse_page(URL, page_html, fetched_at=NOW)
     later = parse_page(URL, page_html, fetched_at=datetime(2027, 1, 1, tzinfo=UTC))

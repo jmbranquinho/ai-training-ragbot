@@ -25,6 +25,9 @@ _NOISE_SELECTORS = [
     ".formarea",  # "was this page helpful?"
     "img",
 ]
+# Teaser cards wrap a heading + paragraph in one big <a>. Converted as-is, each card becomes
+# a single markdown link with the heading inside it, which is poor input for embeddings.
+_CARD_LINK_SELECTOR = "div.teaser > a"
 _DATE_PATTERN = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")  # 22.10.2025
 
 
@@ -38,6 +41,9 @@ def parse_page(url: str, html: str, fetched_at: datetime) -> Document:
     for selector in _NOISE_SELECTORS:
         for element in main.select(selector):
             element.decompose()  # remove from the tree
+
+    for card_link in main.select(_CARD_LINK_SELECTOR):
+        card_link.unwrap()  # replace the <a> with its children: keep heading + text, drop link
 
     return Document(
         url=url,

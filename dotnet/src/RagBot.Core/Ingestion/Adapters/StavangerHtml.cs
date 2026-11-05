@@ -15,6 +15,10 @@ public static partial class StavangerHtml
     private const string NoiseSelectors =
         "script, style, form, aside.byline, ul.anchorlinks, .image-wrapper, .formarea, img";
 
+    // Teaser cards wrap a heading + paragraph in one big <a>. Converted as-is, each card becomes
+    // a single markdown link with the heading inside it, which is poor input for embeddings.
+    private const string CardLinkSelector = "div.teaser > a";
+
     private static readonly HtmlParser Parser = new();
 
     private static readonly ReverseMarkdown.Converter Markdown = new(new ReverseMarkdown.Config
@@ -37,6 +41,12 @@ public static partial class StavangerHtml
         foreach (var element in main.QuerySelectorAll(NoiseSelectors).ToList())
         {
             element.Remove();
+        }
+
+        foreach (var cardLink in main.QuerySelectorAll(CardLinkSelector).ToList())
+        {
+            // Replace the <a> with its children: keep heading + text, drop the link.
+            cardLink.Replace([.. cardLink.ChildNodes]);
         }
 
         return new Document(
