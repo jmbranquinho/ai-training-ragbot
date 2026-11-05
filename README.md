@@ -90,7 +90,7 @@ uv sync                 # create .venv and install exact versions from uv.lock
 uv run ragbot ingest --max-pages 5   # scrape 5 pages into python/data/raw/
 uv run ragbot chunk --strategy headings --show farlig-avfall   # chunk stats + one page's chunks
 uv run ragbot index                  # embed + store in pgvector (unchanged pages are skipped)
-uv run ragbot search "Hvor leverer jeg maling?"
+uv run ragbot search "Hvor leverer jeg maling?" --mode hybrid --top-k 5   # or vector / keyword
 uv run pytest           # tests
 uv run ruff format .    # format
 uv run ruff check .     # lint
@@ -155,6 +155,19 @@ characters, so both implementations split identically.
 Before chunking, pages with identical content are de-duplicated (`indexing/deduplicate`): the
 site serves two long plans in full on every chapter URL, so 159 stored pages contain only 61
 unique ones. The copy with the shortest URL is kept.
+
+### Retrieval
+
+Three retrievers sit behind the `Retriever` interface (`chat/retrieval`), each with `top_k`:
+
+| Mode | How | Good at |
+|---|---|---|
+| `vector` | embed the question, cosine similarity (pgvector HNSW) | paraphrases, other languages |
+| `keyword` | Norwegian full-text search (stemming, stopwords; words OR-ed), `ts_rank_cd` | exact terms, names |
+| `hybrid` (default) | both, merged with Reciprocal Rank Fusion: `sum 1/(60 + rank)` | usually the most robust |
+
+Hybrid scores are RRF scores (around 0.01–0.03), not similarities, so they can't be compared
+with the other modes or used as a relevance threshold.
 
 ## Python ↔ .NET cheat sheet
 

@@ -8,6 +8,7 @@ Table layout (identical in the .NET version):
 
 import json
 from collections.abc import Sequence
+from typing import Any
 
 import psycopg
 from psycopg import sql  # safe quoting of identifiers like the schema name
@@ -103,21 +104,26 @@ class PgVectorChunkIndex:
         ).format(self._schema)
         with psycopg.connect(self._conninfo) as conn:
             rows = conn.execute(query, {"q": query_vector, "k": top_k}).fetchall()
-        return [
-            ScoredChunk(
-                Chunk(
-                    id=r[0],
-                    document_url=r[1],
-                    document_title=r[2],
-                    text=r[3],
-                    position=r[4],
-                    heading=r[5],
-                    metadata=r[6],
-                ),
-                score=float(r[7]),
-            )
-            for r in rows
-        ]
+        return [_to_scored_chunk(r) for r in rows]
+
+    def keyword_search(self, query: str, top_k: int) -> list[ScoredChunk]:
+        """Norwegian full-text search (stemming + stopwords) on the generated tsv column.
+
+        plainto_tsquery joins words with AND (&), so a whole question would only match
+        chunks containing every word. Swapping & for OR (|) means "any word matches, more
+        matches rank higher", which suits natural-language questions.
+        """
+        self._ensure_table()
+        sql_query = sql.SQL(
+            "SELECT id, document_url, document_title, text, position, heading, metadata,"
+            " ts_rank_cd(tsv, q.query) AS score"
+            " FROM {}.chunks, (SELECT replace(plainto_tsquery('norwegian', %(q)s)::text,"
+            " '&', '|')::tsquery AS query) AS q"
+            " WHERE tsv @@ q.query ORDER BY score DESC, id LIMIT %(k)s"
+        ).format(self._schema)
+        with psycopg.connect(self._conninfo) as conn:
+            rows = conn.execute(sql_query, {"q": query, "k": top_k}).fetchall()
+        return [_to_scored_chunk(r) for r in rows]
 
     def _delete_sql(self) -> sql.Composed:
         return sql.SQL("DELETE FROM {}.chunks WHERE document_url = %s").format(self._schema)
@@ -141,3 +147,19 @@ class PgVectorChunkIndex:
                 f"EMBEDDING_DIMENSIONS is {self._dimensions}. Re-run indexing with --rebuild."
             )
         self._ready = True
+
+
+def _to_scored_chunk(row: tuple[Any, ...]) -> ScoredChunk:
+    """Columns: id, document_url, document_title, text, position, heading, metadata, score."""
+    return ScoredChunk(
+        Chunk(
+            id=row[0],
+            document_url=row[1],
+            document_title=row[2],
+            text=row[3],
+            position=row[4],
+            heading=row[5],
+            metadata=row[6],
+        ),
+        score=float(row[7]),
+    )

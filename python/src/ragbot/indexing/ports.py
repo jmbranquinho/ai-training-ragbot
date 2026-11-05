@@ -49,5 +49,12 @@ class ChunkIndex(Protocol):
         ...
 
     def search(self, query_vector: Vector, top_k: int) -> list[ScoredChunk]:
-        """The top_k chunks most similar to the query, best first."""
+        """The top_k chunks most similar to the query vector, best first (cosine similarity)."""
+        ...
+
+    def keyword_search(self, query: str, top_k: int) -> list[ScoredChunk]:
+        """The top_k chunks matching the query's words, best first.
+
+        Scores are on a different scale than search(), so only compare ranks across the two.
+        """
         ...

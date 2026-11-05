@@ -53,6 +53,29 @@ public sealed class PgVectorChunkIndexTests : IDisposable
     }
 
     [SkippableFact]
+    public async Task Keyword_search_is_norwegian_full_text()
+    {
+        Skip.IfNot(DatabaseAvailable.Value, "Postgres not running (docker compose up -d)");
+        using var index = new PgVectorChunkIndex(ConnectionString, Schema, FakeEmbedder.Dimensions);
+        await index.ClearAsync();
+        var url = new Uri("https://x.no/a/");
+        Chunk[] chunks =
+        [
+            MakeChunk(url, 0, "Batterier er farlig avfall"),
+            MakeChunk(url, 1, "Glass og metall leveres i glassbeholderen"),
+            MakeChunk(url, 2, "Batterier og maling leveres på gjenvinningsstasjonen"),
+        ];
+        await index.ReplaceDocumentAsync(url, "v1", chunks, Embed(chunks));
+
+        // "batteriene" is stemmed to "batteri" and matches "Batterier"; "hvor"/"jeg" are stopwords.
+        // OR semantics: chunks with either word match, the one with both words ranks first.
+        var results = await index.KeywordSearchAsync("Hvor leverer jeg batteriene?", topK: 5);
+
+        Assert.Equal([2, 0, 1], results.Select(r => r.Chunk.Position));
+        Assert.Empty(await index.KeywordSearchAsync("hvor er jeg", topK: 5)); // only stopwords: no query
+    }
+
+    [SkippableFact]
     public async Task Wrong_vector_size_asks_for_rebuild()
     {
         Skip.IfNot(DatabaseAvailable.Value, "Postgres not running (docker compose up -d)");

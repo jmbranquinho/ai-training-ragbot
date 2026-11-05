@@ -11,6 +11,8 @@ from pathlib import Path
 
 import httpx
 
+from ragbot.chat.ports import Retriever
+from ragbot.chat.retrieval import HybridRetriever, KeywordRetriever, VectorRetriever
 from ragbot.config import Settings
 from ragbot.indexing.adapters.azure_embedder import AzureOpenAIEmbedder
 from ragbot.indexing.adapters.pgvector_index import PgVectorChunkIndex
@@ -93,17 +95,24 @@ def index(chunker: Chunker, data_dir: Path, rebuild: bool) -> None:
     )
 
 
-def search(question: str, top_k: int) -> None:
-    """Quick check of the index. Step 6 turns this into a proper Retriever."""
+def search(question: str, top_k: int, mode: str) -> None:
     settings = Settings.load()
-    embedder = make_embedder(settings)
+    retriever = make_retriever(settings, mode)
+
+    for i, hit in enumerate(retriever.retrieve(question, top_k), start=1):
+        first_line = hit.chunk.text.splitlines()[0]
+        print(f"{i}. [{hit.score:.3f}] {first_line}\n   {hit.chunk.document_url}")
+
+
+def make_retriever(settings: Settings, mode: str) -> Retriever:
     chunk_index = PgVectorChunkIndex(
         settings.postgres_conninfo, DB_SCHEMA, settings.embedding_dimensions
     )
-
-    for i, hit in enumerate(chunk_index.search(embedder.embed([question])[0], top_k), start=1):
-        first_line = hit.chunk.text.splitlines()[0]
-        print(f"{i}. [{hit.score:.3f}] {first_line}\n   {hit.chunk.document_url}")
+    if mode == "keyword":
+        return KeywordRetriever(chunk_index)  # no embedding call needed
+    if mode == "vector":
+        return VectorRetriever(make_embedder(settings), chunk_index)
+    return HybridRetriever(make_embedder(settings), chunk_index)
 
 
 def make_embedder(settings: Settings) -> AzureOpenAIEmbedder:
@@ -149,9 +158,10 @@ def main() -> None:
     add_chunker_args(index_cmd)
     index_cmd.add_argument("--rebuild", action="store_true", help="drop the index first")
 
-    search_cmd = sub.add_parser("search", help="Show the chunks most similar to a question")
+    search_cmd = sub.add_parser("search", help="Show the chunks most relevant to a question")
     search_cmd.add_argument("question")
     search_cmd.add_argument("--top-k", type=int, default=5)
+    search_cmd.add_argument("--mode", choices=["vector", "keyword", "hybrid"], default="hybrid")
 
     sub.add_parser("chat", help="Ask questions (not implemented yet)")
 
@@ -168,7 +178,7 @@ def main() -> None:
     elif args.command == "index":
         index(make_chunker(args), args.data_dir, args.rebuild)
     elif args.command == "search":
-        search(args.question, args.top_k)
+        search(args.question, args.top_k, args.mode)
     else:
         print(f"'{args.command}' is not implemented yet. Coming in later steps.")
 

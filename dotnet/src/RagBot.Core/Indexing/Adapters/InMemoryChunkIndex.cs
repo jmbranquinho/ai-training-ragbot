@@ -1,12 +1,13 @@
 // IChunkIndex kept in memory: brute-force cosine similarity. For tests and experiments.
 // Mirrors python/src/ragbot/indexing/adapters/in_memory_index.py.
 using System.Numerics.Tensors;
+using System.Text.RegularExpressions;
 using RagBot.Core.Domain;
 using RagBot.Core.Indexing.Ports;
 
 namespace RagBot.Core.Indexing.Adapters;
 
-public sealed class InMemoryChunkIndex : IChunkIndex
+public sealed partial class InMemoryChunkIndex : IChunkIndex
 {
     private readonly Dictionary<Uri, (string Version, List<(Chunk Chunk, ReadOnlyMemory<float> Vector)> Entries)> _documents = [];
 
@@ -57,4 +58,27 @@ public sealed class InMemoryChunkIndex : IChunkIndex
             .ToList();
         return Task.FromResult(results);
     }
+
+    /// <summary>Simple stand-in for full-text search: score = number of query words in the chunk.</summary>
+    public Task<IReadOnlyList<ScoredChunk>> KeywordSearchAsync(string query, int topK, CancellationToken ct = default)
+    {
+        var words = Words(query);
+        IReadOnlyList<ScoredChunk> results = _documents.Values
+            .SelectMany(d => d.Entries)
+            .Select(e => new ScoredChunk(e.Chunk, words.Intersect(Words(e.Chunk.Text)).Count()))
+            .Where(s => s.Score > 0)
+            .OrderByDescending(s => s.Score)
+            .ThenBy(s => s.Chunk.Id, StringComparer.Ordinal)
+            .Take(topK)
+            .ToList();
+        return Task.FromResult(results);
+    }
+
+    private static HashSet<string> Words(string text)
+    {
+        return WordPattern().Matches(text.ToLowerInvariant()).Select(m => m.Value).ToHashSet();
+    }
+
+    [GeneratedRegex(@"\w+")]
+    private static partial Regex WordPattern();
 }

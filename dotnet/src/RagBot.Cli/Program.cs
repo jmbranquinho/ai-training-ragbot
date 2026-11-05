@@ -6,6 +6,8 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using RagBot.Core;
+using RagBot.Core.Chat.Ports;
+using RagBot.Core.Chat.Retrieval;
 using RagBot.Core.Indexing;
 using RagBot.Core.Indexing.Adapters;
 using RagBot.Core.Indexing.Chunkers;
@@ -38,9 +40,10 @@ internal static class Program
           index    Chunk, embed and store pages in pgvector
                      (same --strategy/--max-chars/--size/--overlap/--data-dir options as chunk)
                      --rebuild           drop the index first
-          search   Show the chunks most similar to a question
+          search   Show the chunks most relevant to a question
                      <question>          the question, in quotes
                      --top-k <n>         default: 5
+                     --mode <name>       vector | keyword | hybrid (default: hybrid)
           chat     Ask questions (not implemented yet)
         """;
 
@@ -66,7 +69,7 @@ internal static class Program
                 await RunIndexAsync(args).ConfigureAwait(false);
                 return 0;
             case "search" when args.Length > 1:
-                await RunSearchAsync(args[1], GetIntOption(args, "--top-k", 5)).ConfigureAwait(false);
+                await RunSearchAsync(args[1], GetIntOption(args, "--top-k", 5), GetOption(args, "--mode", "hybrid")).ConfigureAwait(false);
                 return 0;
             case "chat":
                 Console.WriteLine("'chat' is not implemented yet. Coming in later steps.");
@@ -138,13 +141,18 @@ internal static class Program
     }
 
     /// <summary>Quick check of the index. Step 6 turns this into a proper retriever.</summary>
-    private static async Task RunSearchAsync(string question, int topK)
+    private static async Task RunSearchAsync(string question, int topK, string mode)
     {
         var settings = Settings.Load();
         using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
-        var queryVector = (await MakeEmbedder(settings).EmbedAsync([question]).ConfigureAwait(false))[0];
+        IRetriever retriever = mode switch
+        {
+            "keyword" => new KeywordRetriever(index), // no embedding call needed
+            "vector" => new VectorRetriever(MakeEmbedder(settings), index),
+            _ => new HybridRetriever(MakeEmbedder(settings), index),
+        };
 
-        var hits = await index.SearchAsync(queryVector, topK).ConfigureAwait(false);
+        var hits = await retriever.RetrieveAsync(question, topK).ConfigureAwait(false);
         for (var i = 0; i < hits.Count; i++)
         {
             var firstLine = hits[i].Chunk.Text.Split('\n')[0];

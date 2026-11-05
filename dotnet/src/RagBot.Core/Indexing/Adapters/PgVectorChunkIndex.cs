@@ -132,8 +132,33 @@ public sealed partial class PgVectorChunkIndex : IChunkIndex, IDisposable
             + $" FROM {_schema}.chunks ORDER BY embedding <=> @q::vector LIMIT @k");
         command.Parameters.AddWithValue("q", queryVector.ToArray());
         command.Parameters.AddWithValue("k", topK);
-        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        return await ReadScoredChunksAsync(command, ct).ConfigureAwait(false);
+    }
 
+    /// <summary>
+    /// Norwegian full-text search (stemming + stopwords) on the generated tsv column.
+    /// plainto_tsquery joins words with AND (&amp;), so a whole question would only match chunks
+    /// containing every word. Swapping &amp; for OR (|) means "any word matches, more matches rank
+    /// higher", which suits natural-language questions.
+    /// </summary>
+    public async Task<IReadOnlyList<ScoredChunk>> KeywordSearchAsync(string query, int topK, CancellationToken ct = default)
+    {
+        await EnsureTableAsync(ct).ConfigureAwait(false);
+        await using var command = _dataSource.CreateCommand(
+            "SELECT id, document_url, document_title, text, position, heading, metadata::text,"
+            + " ts_rank_cd(tsv, q.query)::float8 AS score"
+            + $" FROM {_schema}.chunks, (SELECT replace(plainto_tsquery('norwegian', @q)::text,"
+            + " '&', '|')::tsquery AS query) AS q"
+            + " WHERE tsv @@ q.query ORDER BY score DESC, id LIMIT @k");
+        command.Parameters.AddWithValue("q", query);
+        command.Parameters.AddWithValue("k", topK);
+        return await ReadScoredChunksAsync(command, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Columns: id, document_url, document_title, text, position, heading, metadata, score.</summary>
+    private static async Task<IReadOnlyList<ScoredChunk>> ReadScoredChunksAsync(NpgsqlCommand command, CancellationToken ct)
+    {
+        await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
         var results = new List<ScoredChunk>();
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {

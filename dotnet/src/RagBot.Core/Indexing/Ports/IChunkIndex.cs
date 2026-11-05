@@ -22,7 +22,13 @@ public interface IChunkIndex
     /// <summary>Remove everything, e.g. after changing the embedding size.</summary>
     Task ClearAsync(CancellationToken ct = default);
 
-    /// <summary>The topK chunks most similar to the query, best first.</summary>
+    /// <summary>The topK chunks most similar to the query vector, best first (cosine similarity).</summary>
     Task<IReadOnlyList<ScoredChunk>> SearchAsync(
         ReadOnlyMemory<float> queryVector, int topK, CancellationToken ct = default);
+
+    /// <summary>
+    /// The topK chunks matching the query's words, best first. Scores are on a different scale
+    /// than SearchAsync, so only compare ranks across the two.
+    /// </summary>
+    Task<IReadOnlyList<ScoredChunk>> KeywordSearchAsync(string query, int topK, CancellationToken ct = default);
 }

@@ -1,6 +1,7 @@
 """ChunkIndex kept in memory: brute-force cosine similarity. For tests and experiments."""
 
 import math
+import re
 from collections.abc import Sequence
 
 from ragbot.domain import Chunk, ScoredChunk
@@ -35,6 +36,21 @@ class InMemoryChunkIndex:
             for chunk, vector in entries
         ]
         return sorted(scored, key=lambda s: s.score, reverse=True)[:top_k]
+
+    def keyword_search(self, query: str, top_k: int) -> list[ScoredChunk]:
+        """Simple stand-in for full-text search: score = number of query words in the chunk."""
+        words = set(_words(query))
+        scored = [
+            ScoredChunk(chunk, float(len(words & set(_words(chunk.text)))))
+            for _, entries in self._documents.values()
+            for chunk, _ in entries
+        ]
+        matches = [s for s in scored if s.score > 0]
+        return sorted(matches, key=lambda s: (-s.score, s.chunk.id))[:top_k]
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"\w+", text.lower())
 
 
 def cosine_similarity(a: Vector, b: Vector) -> float:
