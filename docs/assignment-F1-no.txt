@@ -1,0 +1,190 @@
+F1 GenAI - AI Engineering
+
+Sander Takvam
+Konsulent
+12 min read
+Chatbot
+I denne modulen skal du bygge en chatbot som svarer på spørsmål fra et nettsted ved hjelp av RAG (Retrieval-Augmented Generation). Men vel så viktig som at chatboten svarer riktig, er hvordan du strukturer prosjektet underveis. AI engineering har nemlig mer til felles med software engineering enn med data science og data engineering.
+
+ 
+
+Data scientists og data engineers jobber ofte utforskende: koden vokser fram i en notebook, ett steg om gangen, mens man leter etter noe som funker. Da havner gjerne alt i samme fil, logikk og konfigurasjon blandes sammen, avhengigheter opprettes der de trengs, og “det som funker” blir stående. Det er en effektiv måte å utforske på, men skalerer dårlig. Resulatet blir fort tett koblet kode som er vanskelig å teste, endre og gjenbruke. Software engineers jobber motsatt vei: de avklarer behov, modellerer domenet og velger struktur før de koder, skiller ansvar i tydelige komponenter, og lar koden vokse på en måte som tåler endring. Denne modulen introduserer den arbeidsmåten.
+
+Dette er programvareutvikling som tilfeldigvis handler om AI, ikke notebook arbeid med litt opprydding til slutt.
+
+Bakgrunn
+En offentlig virksomhet vil gjøre informasjonen på nettsidene sine lettere tilgjengelig. I stedet for at innbyggerne må lete gjennom menyer og lange sider, ønsker de en chatbot som svarer på spørsmål.
+
+ 
+
+Din oppgave er å bygge en fungerende prototype: hent innhold fra stavanger.kommune.no, gjør innholdet søkbart, og koble på en språkmodell som svarer basert på det hentede innholdet. Du står fritt til å velge et annet nettsted enn stavanger.kommune.no, men husk å sjekke robots.txt før du begynner. Et tips for å enkelt vurdere om et nettsted egner seg for innhenting av innhold, er å åpne siden i reading mode og se om den nødvendige informasjonen er til stede.
+
+ 
+
+Oppgave
+ 
+
+Forbehold: Dette er en prototype, så poenget er ikke å perfeksjonere alle aspekter, men å ta bevisste valg og kunne begrunne dem. Du vil møte flere designavveininger underveis. Fokuser på å forstå avveiningene framfor å finne “den riktige” løsningen.
+
+ 
+
+Hver steg har utfoldbare tips-bokser med forslag til framgangsmåte, pakker og teknologier du kan bruke. De er bevisst skjult som standard. Prøv deg gjerne på egen hånd først, og fold dem ut hvis du står fast eller vi ha et forslag.
+
+ 
+
+Som et minstekrav trenger du tilgang til noen cloud-resources:
+
+Azure AI Foundry med:
+
+En deployet embedding-modell
+
+En deployet språkmodell
+
+ 
+
+Du kan opprette disse manuelt i Azure-portalen for å komme i gang, det holder for denne oppgaven. Dersom du ønkser å sette opp ressursene som kode (IaC) og deploye løsningen i cloud så er dette dekket som er valgfritt steg under videre utfordinger nederst i denne modulen.
+
+ 
+
+Skill mellom “hva” og “hvordan”
+Denne modulen handler like mye om hvordan du bygger som om hva du bygger. Et sentralt grep er å skille to ting:
+
+Hva løsningen gjør - den egentlig oppgaven, beskrevet i begreper en fagperson forstår: et Dokument deles opp i Chunks, vi finner de mest relevante chunkene for et Spørsmål, og modellen gir et Svar (gjerne med kilde). Her bor også reglene, for eksempel “et skal helst peke tilbake til dokumentet det kom fra”.
+
+Hvordan den gjør det - de tekniske valgene: ligger chunkene i Postgres eller Azure AI Search? Hvilken LLM brukes til å genererer svar?
+
+ 
+
+Kjernen i en applikasjonen kalles ofte domenet og omhandler “hva”-delen. Det er begrepene og reglene i problemet ditt, uavhengig av teknologien rundt.
+
+ 
+
+Hvorfor bry seg om skillet?
+Fordi hvordan-delen endrer seg ofte. DU bytter kanskje database, embedding modell eller LLM underveis. Hvis kjernelogikken ikke vet noe om disse valgene, kan du bytte dem ut uten å måtte gjøre større endringer i koden.
+
+ 
+
+Et konkret bilde: i stedet for at koden din sier “lagre dette i akkurat denne Postgres-databasen”, sier den “jeg trenger noe som kan lagre en chunk og hente den tilbake”. Nøyaktig hva noe er, bestemmer du et annet sted. Da kan du starte enkelt, for eksempel lagre i minne mens du utvikler, og bytte til en ekte database senere, uten å røre kjernen. Denne kontrakten mellom kjernen og omverdenen er det som kalles et interface.
+
+ 
+
+Du trenger ikke kunne all teorien bak dette for å løse oppgaven, men vil du lære mer kan du lese deg opp på Domain-Driven Design og/eller Ports and Adapters (og evt. andre software design-prinsipper).
+
+ 
+
+Steg 1 - Sett opp prosjektet
+Få på plass et grunnleggende oppsett for prosjektet. Husk at det skal være enkelt for en kollega å laste ned prosjektet og kjøre det.
+
+ 
+
+Initialiser prosjektet (her kan det være lurt å bruke en moderne package manager)
+
+Sett opp linting/formatting og en static type checker (anbefaler å skru på format-on-save i vscode)
+
+Skriv en kort README med hvordan man kjører prosjektet
+
+ 
+
+Tenk gjennom - her er det noen valg du bør ta bevisst:
+
+src-layout eller flat-layout? Hva vinner du på hver?
+
+Hvor mange repositories? Alt i ett eller delt opp?
+
+Hvordan organisere koden? Etter lag (layer-first) (domain, application, infrastructure) eller etter funksjon (feature-first) (f.eks. scraping, chunking, retrieval)? Hvor hører et LLM-kall hjemme? Trenger chatboten ha kjennskap til scrapingen eller kan dette være separate løsninger?
+
+Hvordan kan første utkast til interfaces se ut?
+
+ 
+
+ 
+
+
+Tips: organisering, layout og repo-strategi
+
+Tips: verktøy som løfter kodekvaliteten
+
+Tips: project scaffolding
+Steg 2 - Webscraping
+Hent et avgrenset sett med sider fra kilden din
+Konverter HTML til ren tekst (markdown)
+Ta vare på metadata: URL, tittel, seksjon, hentet-dato
+Ta hesyn til robots.txt dersom det eksisterer for nettsiden du scraper.
+Valgfritt: Lag tester for å unngå å scrape nettsiden hver gang du skal teste koden
+
+ 
+
+Tenk gjennom: Hva skjer neste gang du kjører scraperen - henter du alt på nytt, eller bare det som er endret? Hvordan vet du om noe er endret?
+
+
+Tips: teknologi for webscraping
+Steg 3 - Lagring av rådata
+
+Lagre rådataene fra webscrapingen slik at du ikke må hente dem på nytt hver gang
+Ta vare på metadata sammen med innholdet (URL, tittel, hentet-dato)
+
+ 
+
+Tenk gjennom: På dette stadiet har du kun rå, uprosessert tekst. Chunking, embeddings og vektorsøk kommer senere. Her handler det om et enkelt, robust sted å legge innholdet du har scrapet.
+
+
+Tips: lagring av rådata
+Steg 4 - Chunk innholdet
+
+Del teksten i chunks. Her kan du prøve flere strategier (f.eks. overlappende vinduer og split basert på overskrifter)
+Bruk metadata til å bevare sammenheng mellom chunks, slik at du senere kan vise hvor et svar kommer fra
+
+Tips: skjul chunking-strategi bak et interface
+
+Tips: teknologi for chunking
+Steg 5 - Embedding og indexing
+
+Lag embeddings av chunkene og lagre dem
+
+Bygg en søkbar indeks
+
+
+Tips: Lagring av vektorer
+Steg 6 - Søk (retrieval)
+
+Implementer likhetssøk. Prøv eventuelt hybrid søk (vektor + nøkkelord)
+Gjør top-k til en parameter slik at man kan kontrollere hvor mange treff man får.
+ 
+
+Steg 7 - Koble på språkmodellen
+
+Bygg en prompt som gir modellen et spørsmål + de hentede chunkene som kontekst
+Håndter tilfellet der ingenting relevant finnes. Svar heller «jeg vet ikke» enn å hallusinere
+Valgfritt: kildehenvisning - få modellen til å referere til hvilket dokument den fant svaret i
+
+Tips: rammeverk for LLM-laget
+Steg 8 - Evaluering
+
+Lag et lite testsett med spørsmål og forventede svar
+Mål kvaliteten før og etter at du endrer chunking-strategi eller antall treff
+Svarer modellen riktig?
+Henter søket ut riktig svar?
+Hvor i søket er det riktige svaret plassert?
+Hvor mange treff må man ha med for å være sikker på at riktig svar er med?
+
+Tips: rammeverk for evaluering
+Videre utfordinger (valgfritt)
+Dersom du har litt ekstra tid eller ønsker at det skal være mer utfordrende, kan du plukke fra punktene under. De er gruppert etter tema. Du trenger ikke ta alt, og de fleste kan gjøres uavhengig av hverandre.
+
+Brukeropplevelse
+Enkelt UI - En liten chat-webside i stedet for kun terminal/API.
+
+Tips: rammeverk for UI
+Observability
+Logging/observabilitet - hva ble hentet fra søket og hva ble faktisk sendt til modellen? Gjør det mulig å feilsøke og forstå svarene i etterkant.
+
+Tips: rammeverk for observability
+Containerisering og deployment
+Skriv en Dockerfile som pakker løsningen.
+Bygg imaget og push det til et container-register (f.eks. Azure Container Registry).
+Deploy til Azure Container App basert på Docker-imaget.
+Bruk managed identity fremfor API-nøkler for tilgang mellom tjenester.
+
+Tips: containerization og deployment
+Infrastruktur som kode (IaC)
+Sett opp infrastrukturen med IaC i stedet for å klikke i Azure-portalen. Infrastrukturen skal kunne rives ned og settes opp igjen automatisk uten å måtte kjøre den flere ganger.

@@ -1,0 +1,5 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Domain, ports (interfaces) and adapters. Shared settings live in Directory.Build.props. -->
+
+</Project>

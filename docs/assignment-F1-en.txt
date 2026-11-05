@@ -1,0 +1,185 @@
+Chatbot
+In this module, you will build a chatbot that answers questions from a website using RAG (Retrieval-Augmented Generation). But just as important as getting the chatbot to answer correctly is how you structure the project along the way. AI engineering has more in common with software engineering than with data science and data engineering.
+
+ 
+
+Data scientists and data engineers often work exploratory: the code grows in a notebook, one step at a time, while looking for something that works. This often ends up in the same file, logic and configuration are mixed together, dependencies are created where they are needed, and “what works” is left. It is an effective way to explore, but it scales poorly. The result is quickly tightly coupled code that is difficult to test, change, and reuse. Software engineers work the opposite way: they clarify needs, model the domain and choose a structure before coding, separate responsibilities into clear components, and let the code grow in a way that can withstand change. This module introduces that way of working.
+
+This is software development that happens to be about AI, not notebook work with a little cleanup at the end.
+
+Background
+A public entity wants to make the information on its website more accessible. Instead of citizens having to navigate through menus and long pages, they want a chatbot that answers questions.
+
+ 
+
+Your task is to build a working prototype: fetch content from stavanger.kommune.no , make the content searchable, and connect to a language model that responds based on the fetched content. You are free to choose a website other than stavanger.kommune.no , but remember to check robots.txt before you start. A tip to easily assess whether a website is suitable for fetching content is to open the page in reading mode and see if the necessary information is present.
+
+ 
+
+Task
+ 
+
+Disclaimer: This is a prototype, so the point is not to perfect every aspect, but to make conscious choices and be able to justify them. You will encounter several design trade-offs along the way. Focus on understanding the trade-offs rather than finding the “right” solution.
+
+ 
+
+Each step has expandable tip boxes with suggested approaches, packages, and technologies you can use. They are intentionally hidden by default. Feel free to try them out on your own first, and expand them if you get stuck or have a suggestion.
+
+ 
+
+As a minimum requirement, you need access to some cloud resources:
+
+Azure AI Foundry med:
+
+A deployed embedding model
+
+A deployed language model
+
+ 
+
+You can create these manually in the Azure portal to get started, that's enough for this task. If you want to set up the resources as code (IaC) and deploy the solution in the cloud, this is covered as an optional step under further challenges at the bottom of this module.
+
+ 
+
+Distinguish between “what” and “how”
+This module is as much about how you build as what you build . A key point is to distinguish two things:
+
+What the solution does - the actual task, described in terms a professional understands: a Document is divided into Chunks , we find the most relevant chunks for a Question , and the model provides an Answer (preferably with a source). This is also where the rules reside, for example “a should preferably point back to the document it came from”.
+
+How it does it - the technical choices: are the chunks in Postgres or Azure AI Search? Which LLM is used to generate responses?
+
+ 
+
+The core of an application is often called the domain and deals with the “what.” These are the concepts and rules of your problem, regardless of the surrounding technology.
+
+ 
+
+Why bother about the distinction?
+Because the how part changes often. YOU might change the database, embedding model, or LLM along the way. If the core logic doesn't know about these choices, you can replace them without having to make major changes to the code.
+
+ 
+
+A concrete picture: instead of your code saying “store this in this particular Postgres database”, it says “I need something that can store a chunk and retrieve it”. Exactly what that something is, you decide somewhere else. Then you can start simple, for example store in memory while you develop, and switch to a real database later, without touching the kernel. This contract between the kernel and the outside world is what is called an interface .
+
+ 
+
+You don't need to know all the theory behind this to solve the task, but if you want to learn more, you can read up on Domain-Driven Design and/or Ports and Adapters (and possibly other software design principles).
+
+ 
+
+Step 1 - Set up the project
+Get a basic setup for the project in place. Remember that it should be easy for a colleague to download the project and run it.
+
+ 
+
+Initialize the project (here it may be a good idea to use a modern package manager)
+
+Set up linting/formatting and a static type checker (recommend turning on format-on-save in vscode)
+
+Write a short README with how to run the project
+
+ 
+
+Think through - here are some choices you should make consciously:
+
+src-layout or flat-layout? What do you gain from each?
+
+How many repositories? All in one or split up?
+
+How to organize the code? By layer (layer-first) (domain, application, infrastructure) or by function (feature-first) (e.g. scraping, chunking, retrieval)? Where does an LLM call belong? Does the chatbot need to know about scraping or can these be separate solutions?
+
+What might the first draft of interfaces look like?
+
+ 
+
+ 
+
+
+Tips: organization, layout and repo strategy
+
+Tip: tools that improve code quality
+
+Tips: project scaffolding
+Step 2 - Web scraping
+Retrieve a limited set of pages from your source
+Convert HTML to plain text (markdown)
+Preserve metadata: URL, title, section, retrieved date
+Take into account robots.txt if it exists for the website you are scraping.
+Optional: Create tests to avoid scraping the website every time you test the code
+
+ 
+
+Think about it: What happens the next time you run the scraper - do you re-fetch everything, or just what has changed? How do you know if something has changed?
+
+
+Tip: web scraping technology
+Step 3 - Raw data storage
+
+Save the raw data from the web scraping so you don't have to re-fetch it every time
+Preserve metadata along with the content (URL, title, retrieval date)
+
+ 
+
+Think through:  At this stage, you only have raw, unprocessed text. Chunking, embeddings, and vector search will come later. This is about a simple, robust place to put the content you've scraped.
+
+
+Tip: storing raw data
+Step 4 - Chunk the content
+
+Divide the text into chunks. Here you can try several strategies (e.g. overlapping windows and splits based on headings)
+Use metadata to preserve coherence between chunks, so you can later show where a response comes from
+
+Tip: hide chunking strategy behind an interface
+
+Tips: technology for chunking
+Step 5 - Embedding and indexing
+
+Create embeddings of the chunks and store them
+
+Build a searchable index
+
+
+Tip: Storing Vectors
+Step 6 - Search (retrieval)
+
+Implement similarity search. Maybe try hybrid search (vector + keyword)
+Make  top-k it a parameter so you can control how many hits you get.
+ 
+
+Step 7 - Connect the language model
+
+Build a prompt that gives the model a question + the retrieved chunks as context
+Handle the case where nothing relevant is found. Answer "I don't know" rather than hallucinate.
+Optional:  source reference  - have the model reference which document it found the answer in
+
+Tip: framework for the LLM team
+Step 8 - Evaluation
+
+Create a small test set of questions and expected answers
+Measure quality before and after you change chunking strategy or number of hits
+Does the model answer correctly?
+Does the search retrieve the correct answer?
+Where in the search is the correct answer located?
+How many matches do you need to include to be sure that the correct answer is included?
+
+Tip: evaluation framework
+Further challenges (optional)
+If you have a little extra time or want it to be more challenging, you can pick from the points below. They are grouped by theme. You don't have to take everything, and most can be done independently of each other.
+
+User experience
+Simple UI  - A small chat website instead of just terminal/API.
+
+Tip: UI framework
+Observability
+Logging/observability  - what was retrieved from the query and what was actually sent to the model? Makes it possible to troubleshoot and understand the responses afterwards.
+
+Tip: observability framework
+Containerization and deployment
+Write one Dockerfile  that packages the solution.
+Build the image and push it  to a container registry (e.g. Azure Container Registry).
+Deploy to Azure Container App  based on the Docker image.
+Use managed identity  instead of API keys for access between services.
+
+Tips: containerization and deployment
+Infrastructure as Code (IaC)
+Set up your infrastructure with IaC instead of clicking in the Azure portal. Your infrastructure should be able to be torn down and set up again automatically without having to run it multiple times.

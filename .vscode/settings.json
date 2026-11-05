@@ -1,0 +1,21 @@
+{
+  "editor.formatOnSave": true,
+
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+  "python.defaultInterpreterPath": "${workspaceFolder}/python/.venv/Scripts/python.exe",
+  "python.analysis.typeCheckingMode": "standard",
+  "python.testing.pytestEnabled": true,
+  "python.testing.cwd": "${workspaceFolder}/python",
+  "python.testing.pytestArgs": ["tests"],
+
+  "[csharp]": {
+    "editor.defaultFormatter": "ms-dotnettools.csharp"
+  },
+  "dotnet.defaultSolution": "dotnet/RagBot.slnx"
+}

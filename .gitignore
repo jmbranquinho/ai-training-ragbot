@@ -1,0 +1,30 @@
+# --- Secrets / local config ---
+.env
+*.env.local
+appsettings.Development.json
+appsettings.*.local.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# --- .NET ---
+bin/
+obj/
+*.user
+TestResults/
+
+# --- Data produced by the pipeline (scraped pages, indexes) ---
+data/
+
+# --- Editors / OS ---
+.vs/
+.idea/
+.DS_Store
+Thumbs.db

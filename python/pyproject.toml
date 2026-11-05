@@ -1,0 +1,59 @@
+# pyproject.toml is roughly the .csproj of Python: project metadata,
+# dependencies (like <PackageReference>) and tool settings in one file.
+
+[project]
+name = "ragbot"
+version = "0.1.0"
+description = "RAG chatbot that answers questions from a website (Python version)"
+readme = "README.md"
+authors = [
+    { name = "Jorge Branquinho", email = "Jorge.Branquinho@contractor.conocophillips.com" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+# Like an exe entry point: `uv run ragbot` calls ragbot.cli:main
+[project.scripts]
+ragbot = "ragbot.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
+
+# Dev-only dependencies (like PrivateAssets="all" analyzers / test packages)
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]
+
+# --- ruff: linter + formatter (≈ Roslyn analyzers + dotnet format) ---
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle (basic style errors)
+    "F",        # pyflakes (unused imports, undefined names)
+    "I",        # isort (import ordering)
+    "B",        # bugbear (likely bugs)
+    "UP",       # pyupgrade (use modern syntax)
+    "SIM",      # simplifications
+    "N",        # naming conventions
+    "RUF",      # ruff-specific rules
+]
+
+# --- pyright: static type checker (≈ the C# compiler's type checks + nullable) ---
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "standard"
+pythonVersion = "3.13"
+venvPath = "."
+venv = ".venv"
+
+# --- pytest: test runner (≈ xUnit + dotnet test) ---
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
