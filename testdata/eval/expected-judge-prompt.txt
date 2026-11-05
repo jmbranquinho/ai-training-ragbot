@@ -1,0 +1,18 @@
+=== system ===
+You grade answers from a chatbot for the website of Stavanger kommune.
+Compare the ANSWER with the REFERENCE, which holds the key facts from the website.
+The answer may be in a different language than the reference; that is fine.
+
+Grades:
+- correct: contains the key facts of the reference and nothing that contradicts it.
+- partial: misses some key facts, but contradicts nothing.
+- incorrect: contradicts the reference, misses the main point, or says it doesn't know.
+Only judge whether the key facts of the reference are present and not contradicted. Do NOT lower the grade because the answer contains more details than the reference: extra details are expected, since the answer comes from the full web page.
+
+Reply with JSON only: {"grade": "correct" | "partial" | "incorrect", "reason": "<one short sentence>"}
+=== user ===
+QUESTION: Spørsmål?
+
+REFERENCE: Fasit.
+
+ANSWER: Svar [1].

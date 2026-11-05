@@ -1,0 +1,171 @@
+{
+  "description": "Evaluation set for the RagBot (stavanger.kommune.no, section renovasjon-og-miljo). Questions are phrased the way a resident would ask, not copied from headings. expected_urls: pages that contain the answer (any one counts as a hit). An empty list means the site does not answer it, so the correct response is 'I don't know'. reference: the key facts from the page, used by the answer judge.",
+  "questions": [
+    {
+      "id": "q01", "language": "no",
+      "question": "Hvilken dunk skal matavfallet i?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/matavfall/"],
+      "reference": "I den brune beholderen, i de gjennomsiktige matavfallsposene som skal være knyttet igjen."
+    },
+    {
+      "id": "q02", "language": "no",
+      "question": "Hvor kaster jeg plastemballasje?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/plastavfall/"],
+      "reference": "I den grå beholderen for restavfall. Skitten plast skylles først. Plasten sorteres ut på IVARs sorteringsanlegg Sorterium på Forus."
+    },
+    {
+      "id": "q03", "language": "no",
+      "question": "Kan jeg kaste hundebæsj i matavfallet?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/matavfall/"],
+      "reference": "Ja, hundeposer med hundelort kan kastes i den brune beholderen for matavfall."
+    },
+    {
+      "id": "q04", "language": "no",
+      "question": "Hva gjør jeg med klær som er ødelagte?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/klar-tekstiler-og-sko/"],
+      "reference": "Ødelagte tekstiler og sko kastes i restavfallet. Bare rene og hele tekstiler leveres i innsamlingsboks eller gjenbruksbutikk."
+    },
+    {
+      "id": "q05", "language": "no",
+      "question": "Hvor mye billigere blir renovasjonen hvis jeg komposterer selv?",
+      "expected_urls": [
+        "https://www.stavanger.kommune.no/renovasjon-og-miljo/renovasjonsgebyr-og-priser/",
+        "https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/hageavfall/hjemmekompostering-i-stavanger/"
+      ],
+      "reference": "Renovasjonsgebyret reduseres med kr 1269 (2026-sats) hvis du komposterer både matavfall og hageavfall hjemme, eller kr 634 hvis du bare komposterer matavfall og har egen beholder for hageavfall. Krever godkjent kompostbeholder. NB: siden om hjemmekompostering oppgir fortsatt de gamle satsene kr 1113 og 556; begge sidene teller som riktig kilde, men 2026-satsen er den gjeldende."
+    },
+    {
+      "id": "q06", "language": "no",
+      "question": "Hvor mye penger får jeg hvis jeg panter piggdekkene mine?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/miljo-og-klima/gode-miljovalg-i-stavanger/piggdekkpant/"],
+      "reference": "1200 kroner til kjøp av piggfrie vinterdekk, for opptil fire piggdekk. Piggdekkene leveres til dekkforhandleren."
+    },
+    {
+      "id": "q07", "language": "no",
+      "question": "Må jeg betale piggdekkgebyr i Stavanger i vinter?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/miljo-og-klima/piggdekk/"],
+      "reference": "Nei. Piggdekkgebyret ble opphevet av kommunestyret 25. september 2023; vinteren 2022/23 var siste sesong."
+    },
+    {
+      "id": "q08", "language": "no",
+      "question": "Hvordan kan jeg få målt radon hjemme?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/miljo-og-klima/radon-i-stavanger/"],
+      "reference": "Kontakt selv en leverandør som er medlem i Norsk Radonforening og bestill måling. Kommunen måler bare i skoler, barnehager og andre formålsbygg."
+    },
+    {
+      "id": "q09", "language": "no",
+      "question": "Hamsteren min døde. Hva gjør jeg med den?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/andre-typer-avfall/"],
+      "reference": "Små dyr kan begraves i hagen eller pakkes i en matavfallspose og legges i den brune beholderen. Ellers leveres døde kjæledyr til veterinær eller dyrekrematorium."
+    },
+    {
+      "id": "q10", "language": "no",
+      "question": "Får jeg noe for å levere inn en gammel kajakk?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/andre-typer-avfall/"],
+      "reference": "Ja, 1000 kroner i vrakpant når fritidsbåten leveres til et lovlig avfallsmottak."
+    },
+    {
+      "id": "q11", "language": "no",
+      "question": "Har jeg lov til å fyre med olje i huset?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/miljo-og-klima/forbud-mot-oljefyring/"],
+      "reference": "Nei. Fra 1. januar 2020 er det forbudt å fyre med olje og parafin i bygg. Eieren må få et sertifisert firma til å tømme og fjerne oljetanken."
+    },
+    {
+      "id": "q12", "language": "no",
+      "question": "Hvor mye grovavfall kan kommunen hente hjemme hos meg?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/bestille-henting-av-avfall/"],
+      "reference": "Inntil rundt 3 kubikkmeter. Henting bestilles på hentavfall.no, og gjelder privathusholdninger, ikke hytter eller næring."
+    },
+    {
+      "id": "q13", "language": "no",
+      "question": "Hvor mange matavfallsposer får jeg når jeg bestiller?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/bestilling-av-matavfallsposer/"],
+      "reference": "To ruller per bestilling, med 75 poser per rull. De leveres hjem uten kostnad."
+    },
+    {
+      "id": "q14", "language": "no",
+      "question": "Søppeldunken min ble ikke tømt. Hva skal jeg gjøre?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/ikketomt/"],
+      "reference": "Se etter lappen fra renovatøren som forklarer hvorfor; vanligste grunn er feilsortert avfall, eller at beholderen er for tung. Har du ikke fått lapp, meld fra på VOF (Varsle om feil) og la beholderen stå fremme."
+    },
+    {
+      "id": "q15", "language": "no",
+      "question": "Skal melkekartonger i papir eller restavfall?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/papp-og-papir/"],
+      "reference": "Drikkekartong skal i papirdunken, skylt og brettet. Korken kan sitte på."
+    },
+    {
+      "id": "q16", "language": "no",
+      "question": "Hvor kaster jeg gavepapiret etter jul?",
+      "expected_urls": [
+        "https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/papp-og-papir/",
+        "https://www.stavanger.kommune.no/renovasjon-og-miljo/jul-i-stavanger/"
+      ],
+      "reference": "I restavfallet, ikke i papiravfallet."
+    },
+    {
+      "id": "q17", "language": "no",
+      "question": "Hvor kaster jeg et knust speil?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/glass-og-glassemballasje/"],
+      "reference": "Speil er ikke glassemballasje. Små gjenstander kastes i restavfallet; store gjenstander som speil og vinduer leveres på en av IVARs gjenvinningsstasjoner."
+    },
+    {
+      "id": "q18", "language": "no",
+      "question": "Jeg har ikke grønn dunk. Hvordan blir jeg kvitt hageavfallet?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/hageavfall/"],
+      "reference": "Du kan få en beholder med grønt lokk fra kommunen (ikke på øyer med ferge- eller hurtigbåtforbindelse, eller fritidsboliger). Ellers må du kompostere, og større mengder kan hentes gratis via hentavfall.no."
+    },
+    {
+      "id": "q19", "language": "no",
+      "question": "Må hytta mi ha renovasjonsabonnement?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/hytterenovasjon-i-stavanger-kommune/"],
+      "reference": "Ja, alle hytter må ha renovasjonsabonnement. Fritak gis bare etter søknad hvis bygningen ikke er egnet til bruk eller har rivingstillatelse, og ikke bakover i tid."
+    },
+    {
+      "id": "q20", "language": "no",
+      "question": "Jeg har mistet brikken til de nedgravde containerne. Hva koster en ny?",
+      "expected_urls": [
+        "https://www.stavanger.kommune.no/renovasjon-og-miljo/avfallsbeholdere/nedgravde-containere/",
+        "https://www.stavanger.kommune.no/renovasjon-og-miljo/avfallsbeholdere/",
+        "https://www.stavanger.kommune.no/renovasjon-og-miljo/renovasjonsgebyr-og-priser/"
+      ],
+      "reference": "En ny brikke koster 100 kroner. Kontakt styret der du bor eller Innbyggerservice i kommunen."
+    },
+    {
+      "id": "q21", "language": "en",
+      "question": "Where can I get rid of an old sofa?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/mobler-hvitevarer-og-annet-grovavfall/"],
+      "reference": "Order free pickup of bulky waste at hentavfall.no, or deliver it yourself to one of IVAR's staffed recycling stations. Usable furniture can be given to a second-hand shop."
+    },
+    {
+      "id": "q22", "language": "en",
+      "question": "How should I sort food waste?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/kildesortering-i-stavanger/matavfall/"],
+      "reference": "Food waste goes in the brown bin, inside the transparent food waste bags, which must be tied shut."
+    },
+    {
+      "id": "q23", "language": "en",
+      "question": "Can I set off fireworks in the city centre on New Year's Eve?",
+      "expected_urls": ["https://www.stavanger.kommune.no/renovasjon-og-miljo/jul-i-stavanger/"],
+      "reference": "No. Fireworks are banned in the wooden house area (trehusbyen), Stavanger city centre and the small boat harbours. There are shared fireworks displays at nine places."
+    },
+    {
+      "id": "q24", "language": "no",
+      "question": "Hvordan søker jeg barnehageplass?",
+      "expected_urls": [],
+      "reference": "Not covered by the indexed pages: the bot should say it doesn't know."
+    },
+    {
+      "id": "q25", "language": "no",
+      "question": "Hvem vant fotball-VM i 2022?",
+      "expected_urls": [],
+      "reference": "Off-topic: the bot should say it doesn't know."
+    },
+    {
+      "id": "q26", "language": "no",
+      "question": "Hva koster beboerparkering i sentrum?",
+      "expected_urls": [],
+      "reference": "Not covered by the indexed pages: the bot should say it doesn't know."
+    }
+  ]
+}

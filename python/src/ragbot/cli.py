@@ -5,8 +5,11 @@ wires them together. Everything else only knows the ports.
 """
 
 import argparse
+import json
 import logging
 import math
+from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -18,6 +21,9 @@ from ragbot.chat.retrieval import HybridRetriever, KeywordRetriever, VectorRetri
 from ragbot.chat.service import ChatService
 from ragbot.config import Settings
 from ragbot.domain import Answer
+from ragbot.evaluation.azure_judge import AzureOpenAIJudge
+from ragbot.evaluation.dataset import load_questions
+from ragbot.evaluation.service import KS, AnswerResult, evaluate_answers, evaluate_retrieval
 from ragbot.indexing.adapters.azure_embedder import AzureOpenAIEmbedder
 from ragbot.indexing.adapters.pgvector_index import PgVectorChunkIndex
 from ragbot.indexing.chunkers import HeadingChunker, SlidingWindowChunker
@@ -32,6 +38,8 @@ from ragbot.ingestion.service import IngestService
 BASE_URL = "https://www.stavanger.kommune.no"
 USER_AGENT = "RagBot-training/0.1"
 DB_SCHEMA = "python"  # the .NET version uses "dotnet" in the same database
+MODES = ["vector", "keyword", "hybrid"]
+QUESTIONS = Path(__file__).resolve().parents[3] / "eval" / "questions.json"
 
 
 def ingest(section: str, max_pages: int, delay: float, data_dir: Path) -> None:
@@ -80,15 +88,13 @@ def chunk(chunker: Chunker, data_dir: Path, show: str | None) -> None:
             break
 
 
-def index(chunker: Chunker, data_dir: Path, rebuild: bool) -> None:
+def index(chunker: Chunker, data_dir: Path, rebuild: bool, schema: str) -> None:
     settings = Settings.load()
     service = IndexService(
         store=FileDocumentStore(data_dir),
         chunker=chunker,
         embedder=make_embedder(settings),
-        index=PgVectorChunkIndex(
-            settings.postgres_conninfo, DB_SCHEMA, settings.embedding_dimensions
-        ),
+        index=PgVectorChunkIndex(settings.postgres_conninfo, schema, settings.embedding_dimensions),
     )
 
     report = service.run(rebuild=rebuild)
@@ -99,18 +105,70 @@ def index(chunker: Chunker, data_dir: Path, rebuild: bool) -> None:
     )
 
 
-def search(question: str, top_k: int, mode: str) -> None:
+def search(question: str, top_k: int, mode: str, schema: str) -> None:
     settings = Settings.load()
-    retriever = make_retriever(settings, mode)
+    retriever = make_retriever(settings, mode, schema)
 
     for i, hit in enumerate(retriever.retrieve(question, top_k), start=1):
         first_line = hit.chunk.text.splitlines()[0]
         print(f"{i}. [{hit.score:.3f}] {first_line}\n   {hit.chunk.document_url}")
 
 
-def make_retriever(settings: Settings, mode: str) -> Retriever:
+def eval_retrieval(questions_path: Path, modes: list[str], schema: str) -> None:
+    settings = Settings.load()
+    questions = load_questions(questions_path)
+    print(f"Retrieval on {schema}: {sum(q.answerable for q in questions)} answerable questions")
+    print(f"{'mode':8} {'hit@1':>6} {'hit@3':>6} {'hit@5':>6} {'hit@10':>6} {'MRR':>6}  not found")
+    for mode in modes:
+        results, s = evaluate_retrieval(make_retriever(settings, mode, schema), questions)
+        hits = " ".join(f"{s.hit_at[k]:>6.0%}" for k in KS)
+        missed = [r.question_id for r in results if r.rank is None]
+        print(f"{mode:8} {hits} {s.mrr:>6.3f}  {s.not_found} {missed if missed else ''}")
+        save_results(f"retrieval-{schema}-{mode}", [asdict(r) for r in results])
+
+
+def eval_answers(questions_path: Path, mode: str, top_k: int, schema: str) -> None:
+    settings = Settings.load()
+    client = create_client(settings.azure_openai_endpoint, settings.azure_openai_api_key)
+    judge = AzureOpenAIJudge(client, settings.chat_deployment)
+    questions = load_questions(questions_path)
+
+    results = evaluate_answers(make_chat_service(settings, mode, top_k, schema), judge, questions)
+
+    for r in results:
+        print(
+            f"{r.question_id} {r.grade:9} cited={'y' if r.cited_expected_page else '-'}  {r.reason}"
+        )
+    answerable = [r for r in results if r.answerable]
+    unanswerable = [r for r in results if not r.answerable]
+
+    def share(rows: list[AnswerResult], grade: str) -> str:
+        return f"{sum(r.grade == grade for r in rows)}/{len(rows)}"
+
+    print(f"\n{schema} / {mode} / top_k={top_k}")
+    cited = sum(r.cited_expected_page for r in answerable)
+    refused = sum(r.said_unknown for r in answerable)
+    print(
+        f"  answerable:   correct {share(answerable, 'correct')}, "
+        f"partial {share(answerable, 'partial')}, incorrect {share(answerable, 'incorrect')}, "
+        f"cited a correct page {cited}/{len(answerable)}, wrongly said 'don't know' {refused}"
+    )
+    print(f"  unanswerable: correctly refused {share(unanswerable, 'correct')}")
+    save_results(f"answers-{schema}-{mode}-k{top_k}", [asdict(r) for r in results])
+
+
+def save_results(name: str, rows: list[dict[str, object]]) -> None:
+    """Full per-question results, so runs can be compared later (eval/results/, git-ignored)."""
+    folder = Path(__file__).resolve().parents[3] / "eval" / "results"
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = folder / f"{stamp}-python-{name}.json"
+    path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def make_retriever(settings: Settings, mode: str, schema: str) -> Retriever:
     chunk_index = PgVectorChunkIndex(
-        settings.postgres_conninfo, DB_SCHEMA, settings.embedding_dimensions
+        settings.postgres_conninfo, schema, settings.embedding_dimensions
     )
     if mode == "keyword":
         return KeywordRetriever(chunk_index)  # no embedding call needed
@@ -119,10 +177,10 @@ def make_retriever(settings: Settings, mode: str) -> Retriever:
     return HybridRetriever(make_embedder(settings), chunk_index)
 
 
-def make_chat_service(settings: Settings, mode: str, top_k: int) -> ChatService:
+def make_chat_service(settings: Settings, mode: str, top_k: int, schema: str) -> ChatService:
     client = create_client(settings.azure_openai_endpoint, settings.azure_openai_api_key)
     generator = AzureOpenAIAnswerGenerator(client, settings.chat_deployment)
-    return ChatService(make_retriever(settings, mode), generator, top_k)
+    return ChatService(make_retriever(settings, mode, schema), generator, top_k)
 
 
 def print_answer(answer: Answer) -> None:
@@ -134,12 +192,12 @@ def print_answer(answer: Answer) -> None:
             print(f"  {i}. {source.document_title}{where}\n     {source.document_url}")
 
 
-def ask(question: str, mode: str, top_k: int) -> None:
-    print_answer(make_chat_service(Settings.load(), mode, top_k).ask(question))
+def ask(question: str, mode: str, top_k: int, schema: str) -> None:
+    print_answer(make_chat_service(Settings.load(), mode, top_k, schema).ask(question))
 
 
-def chat(mode: str, top_k: int) -> None:
-    service = make_chat_service(Settings.load(), mode, top_k)
+def chat(mode: str, top_k: int, schema: str) -> None:
+    service = make_chat_service(Settings.load(), mode, top_k, schema)
     print("Spør om renovasjon og miljø i Stavanger kommune. Tom linje avslutter.")
     while question := input("\n> ").strip():  # loop until an empty line
         print_answer(service.ask(question))
@@ -187,14 +245,24 @@ def main() -> None:
     search_cmd = sub.add_parser("search", help="Show the chunks most relevant to a question")
     search_cmd.add_argument("question")
     search_cmd.add_argument("--top-k", type=int, default=5)
-    search_cmd.add_argument("--mode", choices=["vector", "keyword", "hybrid"], default="hybrid")
+    search_cmd.add_argument("--mode", choices=MODES, default="hybrid")
 
     ask_cmd = sub.add_parser("ask", help="Answer one question with sources")
     ask_cmd.add_argument("question")
     chat_cmd = sub.add_parser("chat", help="Interactive chat (empty line quits)")
     for cmd in (ask_cmd, chat_cmd):
         cmd.add_argument("--top-k", type=int, default=5, help="chunks given to the model")
-        cmd.add_argument("--mode", choices=["vector", "keyword", "hybrid"], default="hybrid")
+        cmd.add_argument("--mode", choices=MODES, default="hybrid")
+
+    eval_cmd = sub.add_parser("eval", help="Evaluate on eval/questions.json")
+    eval_cmd.add_argument("what", choices=["retrieval", "answers"])
+    eval_cmd.add_argument("--modes", default="vector,keyword,hybrid", help="retrieval: modes")
+    eval_cmd.add_argument("--mode", choices=MODES, default="hybrid", help="answers: mode")
+    eval_cmd.add_argument("--top-k", type=int, default=5, help="answers: chunks for the model")
+    eval_cmd.add_argument("--questions", type=Path, default=QUESTIONS)
+
+    for cmd in (index_cmd, search_cmd, ask_cmd, chat_cmd, eval_cmd):
+        cmd.add_argument("--schema", default=DB_SCHEMA, help="database schema (index variant)")
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -207,13 +275,17 @@ def main() -> None:
     elif args.command == "chunk":
         chunk(make_chunker(args), args.data_dir, args.show)
     elif args.command == "index":
-        index(make_chunker(args), args.data_dir, args.rebuild)
+        index(make_chunker(args), args.data_dir, args.rebuild, args.schema)
     elif args.command == "search":
-        search(args.question, args.top_k, args.mode)
+        search(args.question, args.top_k, args.mode, args.schema)
     elif args.command == "ask":
-        ask(args.question, args.mode, args.top_k)
+        ask(args.question, args.mode, args.top_k, args.schema)
     elif args.command == "chat":
-        chat(args.mode, args.top_k)
+        chat(args.mode, args.top_k, args.schema)
+    elif args.command == "eval" and args.what == "retrieval":
+        eval_retrieval(args.questions, args.modes.split(","), args.schema)
+    elif args.command == "eval":
+        eval_answers(args.questions, args.mode, args.top_k, args.schema)
 
 
 if __name__ == "__main__":  # lets you also run: python -m ragbot.cli

@@ -4,6 +4,7 @@
 // This is the "composition root": the one place that picks concrete adapters and wires
 // them together. (A bigger app would use Microsoft.Extensions.DependencyInjection here.)
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RagBot.Core;
 using RagBot.Core.Chat;
@@ -11,6 +12,8 @@ using RagBot.Core.Chat.Adapters;
 using RagBot.Core.Chat.Ports;
 using RagBot.Core.Chat.Retrieval;
 using RagBot.Core.Domain;
+using RagBot.Core.Evaluation;
+using RagBot.Core.Evaluation.Adapters;
 using RagBot.Core.Indexing;
 using RagBot.Core.Indexing.Adapters;
 using RagBot.Core.Indexing.Chunkers;
@@ -52,9 +55,24 @@ internal static class Program
                      --top-k <n>         chunks given to the model (default: 5)
                      --mode <name>       vector | keyword | hybrid (default: hybrid)
           chat     Interactive chat (empty line quits); same --top-k/--mode options as ask
+          eval     Evaluate on eval/questions.json
+                     retrieval           hit@k and MRR per mode
+                       --modes <list>    default: vector,keyword,hybrid
+                     answers             answer quality, graded by an LLM judge
+                       --mode / --top-k  as for ask
+
+        index, search, ask, chat and eval take --schema <name> (default: dotnet) to pick an
+        index variant, e.g. one built with other chunking settings.
         """;
 
     private const string DbSchema = "dotnet"; // the Python version uses "python" in the same database
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // keep æøå readable
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    };
 
     public static async Task<int> Main(string[] args)
     {
@@ -76,13 +94,19 @@ internal static class Program
                 await RunIndexAsync(args).ConfigureAwait(false);
                 return 0;
             case "search" when args.Length > 1:
-                await RunSearchAsync(args[1], GetIntOption(args, "--top-k", 5), GetOption(args, "--mode", "hybrid")).ConfigureAwait(false);
+                await RunSearchAsync(args[1], GetIntOption(args, "--top-k", 5), GetOption(args, "--mode", "hybrid"), GetOption(args, "--schema", DbSchema)).ConfigureAwait(false);
                 return 0;
             case "ask" when args.Length > 1:
                 await RunAskAsync(args[1], args).ConfigureAwait(false);
                 return 0;
             case "chat":
                 await RunChatAsync(args).ConfigureAwait(false);
+                return 0;
+            case "eval" when args.Length > 1 && args[1] == "retrieval":
+                await RunEvalRetrievalAsync(args).ConfigureAwait(false);
+                return 0;
+            case "eval" when args.Length > 1 && args[1] == "answers":
+                await RunEvalAnswersAsync(args).ConfigureAwait(false);
                 return 0;
             default:
                 Console.Error.WriteLine(Usage);
@@ -134,7 +158,7 @@ internal static class Program
         {
             builder.AddSimpleConsole(options => options.SingleLine = true);
         });
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, GetOption(args, "--schema", DbSchema), settings.EmbeddingDimensions);
         var service = new IndexService(
             new FileDocumentStore(dataDir),
             MakeChunker(args),
@@ -150,10 +174,10 @@ internal static class Program
             + $"{report.Unchanged.Count} unchanged, {report.Deleted.Count} removed.");
     }
 
-    private static async Task RunSearchAsync(string question, int topK, string mode)
+    private static async Task RunSearchAsync(string question, int topK, string mode, string schema)
     {
         var settings = Settings.Load();
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, schema, settings.EmbeddingDimensions);
         var retriever = MakeRetriever(settings, mode, index);
 
         var hits = await retriever.RetrieveAsync(question, topK).ConfigureAwait(false);
@@ -168,7 +192,7 @@ internal static class Program
     private static async Task RunAskAsync(string question, string[] args)
     {
         var settings = Settings.Load();
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, GetOption(args, "--schema", DbSchema), settings.EmbeddingDimensions);
         var service = MakeChatService(settings, args, index);
 
         PrintAnswer(await service.AskAsync(question).ConfigureAwait(false));
@@ -177,7 +201,7 @@ internal static class Program
     private static async Task RunChatAsync(string[] args)
     {
         var settings = Settings.Load();
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, GetOption(args, "--schema", DbSchema), settings.EmbeddingDimensions);
         var service = MakeChatService(settings, args, index);
 
         Console.WriteLine("Spør om renovasjon og miljø i Stavanger kommune. Tom linje avslutter.");
@@ -192,6 +216,87 @@ internal static class Program
 
             PrintAnswer(await service.AskAsync(question).ConfigureAwait(false));
         }
+    }
+
+    private static async Task RunEvalRetrievalAsync(string[] args)
+    {
+        var settings = Settings.Load();
+        var schema = GetOption(args, "--schema", DbSchema);
+        var questions = QuestionSet.Load(QuestionsPath(args));
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, schema, settings.EmbeddingDimensions);
+
+        Console.WriteLine($"Retrieval on {schema}: {questions.Count(q => q.Answerable)} answerable questions");
+        Console.WriteLine($"{"mode",-8} {"hit@1",6} {"hit@3",6} {"hit@5",6} {"hit@10",6} {"MRR",6}  not found");
+        foreach (var mode in GetOption(args, "--modes", "vector,keyword,hybrid").Split(','))
+        {
+            var (results, s) = await EvaluationService.EvaluateRetrievalAsync(MakeRetriever(settings, mode, index), questions).ConfigureAwait(false);
+            var hits = string.Join(" ", EvaluationService.Ks.Select(k => s.HitAt[k].ToString("0%", CultureInfo.InvariantCulture).PadLeft(6)));
+            var missed = results.Where(r => r.Rank is null).Select(r => r.QuestionId).ToList();
+            var missedText = missed.Count > 0 ? $"[{string.Join(", ", missed)}]" : "";
+            Console.WriteLine($"{mode,-8} {hits} {s.Mrr.ToString("0.000", CultureInfo.InvariantCulture),6}  {s.NotFound} {missedText}");
+            SaveResults($"retrieval-{schema}-{mode}", results);
+        }
+    }
+
+    private static async Task RunEvalAnswersAsync(string[] args)
+    {
+        var settings = Settings.Load();
+        var schema = GetOption(args, "--schema", DbSchema);
+        var mode = GetOption(args, "--mode", "hybrid");
+        var topK = GetIntOption(args, "--top-k", 5);
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, schema, settings.EmbeddingDimensions);
+        var client = AzureOpenAIClientFactory.Create(settings.AzureOpenAIEndpoint, settings.AzureOpenAIApiKey);
+        var judge = new AzureOpenAIJudge(client, settings.ChatDeployment);
+
+        var results = await EvaluationService.EvaluateAnswersAsync(
+            MakeChatService(settings, args, index), judge, QuestionSet.Load(QuestionsPath(args))).ConfigureAwait(false);
+
+        foreach (var r in results)
+        {
+            Console.WriteLine($"{r.QuestionId} {r.Grade.ToString().ToLowerInvariant(),-9} cited={(r.CitedExpectedPage ? "y" : "-")}  {r.Reason}");
+        }
+
+        var answerable = results.Where(r => r.Answerable).ToList();
+        var unanswerable = results.Where(r => !r.Answerable).ToList();
+        string Share(List<AnswerResult> rows, Grade grade)
+        {
+            return $"{rows.Count(r => r.Grade == grade)}/{rows.Count}";
+        }
+
+        Console.WriteLine($"\n{schema} / {mode} / top_k={topK}");
+        Console.WriteLine(
+            $"  answerable:   correct {Share(answerable, Grade.Correct)}, partial {Share(answerable, Grade.Partial)}, "
+            + $"incorrect {Share(answerable, Grade.Incorrect)}, cited a correct page {answerable.Count(r => r.CitedExpectedPage)}/{answerable.Count}, "
+            + $"wrongly said 'don't know' {answerable.Count(r => r.SaidUnknown)}");
+        Console.WriteLine($"  unanswerable: correctly refused {Share(unanswerable, Grade.Correct)}");
+        SaveResults($"answers-{schema}-{mode}-k{topK}", results);
+    }
+
+    /// <summary>Full per-question results, so runs can be compared later (eval/results/, git-ignored).</summary>
+    private static void SaveResults<T>(string name, IEnumerable<T> rows)
+    {
+        var folder = Path.Combine(RepoRoot(), "eval", "results");
+        Directory.CreateDirectory(folder);
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var json = JsonSerializer.Serialize(rows, JsonOptions);
+        File.WriteAllText(Path.Combine(folder, $"{stamp}-dotnet-{name}.json"), json);
+    }
+
+    private static string QuestionsPath(string[] args)
+    {
+        return GetOption(args, "--questions", Path.Combine(RepoRoot(), "eval", "questions.json"));
+    }
+
+    /// <summary>The folder above dotnet/: found by walking up from the current folder.</summary>
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "eval")))
+        {
+            dir = dir.Parent;
+        }
+
+        return dir?.FullName ?? throw new DirectoryNotFoundException("eval/ folder not found above the current folder");
     }
 
     private static ChatService MakeChatService(Settings settings, string[] args, PgVectorChunkIndex index)
