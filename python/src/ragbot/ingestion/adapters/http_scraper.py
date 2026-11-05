@@ -76,4 +76,6 @@ class HttpScraper:
                 logger.info("Skipping %s (not HTML)", url)
                 continue
 
-            yield stavanger_html.parse_page(url, response.text, fetched_at=datetime.now(UTC))
+            # Whole seconds: that's the precision the file store keeps.
+            fetched_at = datetime.now(UTC).replace(microsecond=0)
+            yield stavanger_html.parse_page(url, response.text, fetched_at=fetched_at)

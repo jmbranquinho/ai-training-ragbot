@@ -24,6 +24,7 @@ _NOISE_SELECTORS = [
     ".image-wrapper",
     ".formarea",  # "was this page helpful?"
     "img",
+    "iframe",  # embedded PDF viewer; parsers disagree on its fallback content
 ]
 # Teaser cards wrap a heading + paragraph in one big <a>. Converted as-is, each card becomes
 # a single markdown link with the heading inside it, which is poor input for embeddings.

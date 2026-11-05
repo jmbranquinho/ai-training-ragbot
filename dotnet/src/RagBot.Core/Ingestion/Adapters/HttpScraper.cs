@@ -63,7 +63,9 @@ public sealed partial class HttpScraper(
             }
 
             var html = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            return StavangerHtml.ParsePage(url, html, DateTimeOffset.UtcNow);
+            // Whole seconds: that's the precision the file store keeps.
+            var fetchedAt = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            return StavangerHtml.ParsePage(url, html, fetchedAt);
         }
         catch (HttpRequestException error)
         {

@@ -31,8 +31,18 @@ def test_parse_page_converts_content_to_markdown(page_html: str) -> None:
 def test_parse_page_strips_noise(page_html: str) -> None:
     content = parse_page(URL, page_html, fetched_at=NOW).content
 
-    for noise in ["Del på Facebook", "Oppdatert", "Var siden nyttig", "should be ignored",
-                  "Main menu", "Stavanger kommune", "piktogram", "\xa0"]:  # fmt: skip
+    noise_texts = [
+        "Del på Facebook",
+        "Oppdatert",
+        "Var siden nyttig",
+        "should be ignored",
+        "Main menu",
+        "Stavanger kommune",
+        "piktogram",
+        "PDF-visning",
+        "\xa0",
+    ]
+    for noise in noise_texts:
         assert noise not in content, noise
 
 

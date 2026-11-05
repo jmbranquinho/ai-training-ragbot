@@ -17,6 +17,50 @@ docs/     assignment text and notes
 - **.NET side:** .NET 10 SDK
 - **VS Code:** open the repo root and install the recommended extensions when prompted.
 
+## Local database (Docker)
+
+Chunks and embeddings are stored in PostgreSQL with the
+[pgvector](https://github.com/pgvector/pgvector) extension, run with Docker Compose
+([docker-compose.yml](docker-compose.yml)). Any Docker engine works. This repo uses the free
+Docker Engine inside WSL 2 (no Docker Desktop or Rancher Desktop needed).
+
+### One-time setup (Windows, PowerShell)
+
+```bash
+wsl --install -d Ubuntu-24.04 --no-launch
+```
+
+```bash
+wsl -d Ubuntu-24.04 -u root -- bash "/mnt/c/dev/ved/AI Training/scripts/wsl-install-docker.sh"
+```
+
+```bash
+wsl --terminate Ubuntu-24.04
+```
+
+[scripts/wsl-install-docker.sh](scripts/wsl-install-docker.sh) installs Docker Engine from
+Docker's official apt repository, enables it as a service, and stops Ubuntu from inheriting the
+Windows `PATH` (otherwise Windows-side Docker tools, such as Rancher Desktop's, interfere).
+
+### Daily use
+
+WSL shuts Ubuntu down when it's idle, so start the database before running the apps:
+
+```bash
+wsl -d Ubuntu-24.04 -u root --cd "/mnt/c/dev/ved/AI Training" -- docker compose up -d --wait
+```
+
+Other commands follow the same pattern: replace `up -d --wait` with
+`ps` (status), `down` (stop; data is kept in the `pgdata` volume), `down -v` (stop and
+**delete** all data, e.g. to re-run [db/init/](db/init/)) or
+`exec postgres psql -U ragbot` (SQL prompt).
+
+| Setting | Value (local development only) |
+|---|---|
+| Host / port | `localhost:5433` |
+| Database / user / password | `ragbot` / `ragbot` / `ragbot` |
+| Schemas | `python` and `dotnet`: one per implementation, so they don't overwrite each other |
+
 ## Run it
 
 ### Python
@@ -24,7 +68,7 @@ docs/     assignment text and notes
 ```bash
 cd python
 uv sync                 # create .venv and install exact versions from uv.lock
-uv run ragbot ingest --max-pages 5 --show   # scrape 5 pages, print the first one
+uv run ragbot ingest --max-pages 5   # scrape 5 pages into python/data/raw/
 uv run pytest           # tests
 uv run ruff format .    # format
 uv run ruff check .     # lint
@@ -36,7 +80,7 @@ uv run pyright          # type check
 ```bash
 cd dotnet
 dotnet build                                  # also runs analyzers (warnings = errors)
-dotnet run --project src/RagBot.Cli -- ingest --max-pages 5 --show
+dotnet run --project src/RagBot.Cli -- ingest --max-pages 5   # into dotnet/data/raw/
 dotnet test                                   # tests
 dotnet format                                 # format
 ```
@@ -57,6 +101,18 @@ There are two flows. They share nothing except the index:
 
 - **Offline pipeline** (`ingest`): scrape → store raw → chunk → embed → index
 - **Chatbot** (`chat`): question → retrieve top-k → LLM → answer with sources
+
+### Raw page storage
+
+`ingest` saves each page as `data/raw/<host>/<url path>.md`: a small metadata header
+(url, title, section, updated_on, fetched_at, content_hash) followed by the markdown.
+Both versions use exactly the same format, pinned by
+[testdata/stavanger/stored-document.md](testdata/stavanger/stored-document.md), so they can
+read each other's files.
+
+Re-running `ingest` still downloads every page (the site sends no ETag/Last-Modified
+headers), but it compares content hashes and only rewrites pages that changed. It reports
+each page as **new**, **updated** or **unchanged**.
 
 ## Python ↔ .NET cheat sheet
 

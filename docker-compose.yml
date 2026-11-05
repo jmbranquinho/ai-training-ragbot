@@ -1,0 +1,30 @@
+# Local infrastructure for development. Start with:  docker compose up -d
+#
+# PostgreSQL + pgvector stores chunks and their embeddings (Steps 5-6).
+# The Python and .NET versions share this one database, each in its own schema
+# (python / dotnet), so they never overwrite each other's data.
+#
+# Credentials below are for local development only.
+name: ragbot
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped # comes back whenever the Docker engine starts
+    environment:
+      POSTGRES_DB: ragbot
+      POSTGRES_USER: ragbot
+      POSTGRES_PASSWORD: ragbot
+    ports:
+      - "5433:5432" # host 5433, so it won't clash with a locally installed Postgres on 5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data # data survives `docker compose down`
+      - ./db/init:/docker-entrypoint-initdb.d:ro # runs once, on first start with an empty volume
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ragbot -d ragbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

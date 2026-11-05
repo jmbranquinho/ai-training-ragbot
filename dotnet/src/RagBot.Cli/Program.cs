@@ -5,6 +5,7 @@
 // them together. (A bigger app would use Microsoft.Extensions.DependencyInjection here.)
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using RagBot.Core.Ingestion;
 using RagBot.Core.Ingestion.Adapters;
 
 namespace RagBot.Cli;
@@ -17,11 +18,11 @@ internal static class Program
         Usage: ragbot <command> [options]
 
         Commands:
-          ingest   Scrape the website (offline pipeline)
+          ingest   Scrape the website and store raw pages
                      --section <name>    URL path section (default: renovasjon-og-miljo)
                      --max-pages <n>     default: 10
                      --delay <seconds>   between requests (default: 1.0)
-                     --show              print the first page's markdown
+                     --data-dir <path>   where pages are stored (default: data/raw)
           chat     Ask questions (not implemented yet)
         """;
 
@@ -52,7 +53,7 @@ internal static class Program
         var section = GetOption(args, "--section", "renovasjon-og-miljo");
         var maxPages = int.Parse(GetOption(args, "--max-pages", "10"), CultureInfo.InvariantCulture);
         var delaySeconds = double.Parse(GetOption(args, "--delay", "1.0"), CultureInfo.InvariantCulture);
-        var show = args.Contains("--show");
+        var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Path.Combine("data", "raw")));
 
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
@@ -71,22 +72,15 @@ internal static class Program
             loggerFactory.CreateLogger<SiteMapUrlSource>());
         var scraper = new HttpScraper(
             client, robots, loggerFactory.CreateLogger<HttpScraper>(), TimeSpan.FromSeconds(delaySeconds));
-        var store = new InMemoryDocumentStore(); // Step 3 replaces this with a persistent store
+        var store = new FileDocumentStore(dataDir);
+        var service = new IngestService(source, scraper, store, loggerFactory.CreateLogger<IngestService>());
 
-        var urls = await source.DiscoverAsync().ConfigureAwait(false);
-        await foreach (var doc in scraper.FetchAsync(urls).ConfigureAwait(false))
-        {
-            await store.SaveAsync(doc).ConfigureAwait(false);
-            Console.WriteLine($"- {doc.Title}  ({doc.Content.Length} chars, updated {doc.UpdatedOn:yyyy-MM-dd})");
-            Console.WriteLine($"  {doc.Url}");
-        }
+        var report = await service.RunAsync().ConfigureAwait(false);
 
-        var documents = await store.AllAsync().ToListAsync().ConfigureAwait(false);
-        Console.WriteLine($"\nFetched {documents.Count} documents.");
-        if (show && documents.Count > 0)
-        {
-            Console.WriteLine($"\n--- {documents[0].Url} ---\n{documents[0].Content}");
-        }
+        loggerFactory.Dispose(); // flush the console logger before printing the summary
+        Console.WriteLine(
+            $"\n{report.New.Count} new, {report.Updated.Count} updated, "
+            + $"{report.Unchanged.Count} unchanged. Files in {dataDir}");
     }
 
     // Minimal option parsing, so the comparison with Python's argparse stays readable.

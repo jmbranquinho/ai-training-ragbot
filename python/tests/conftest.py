@@ -16,6 +16,11 @@ def read_testdata(name: str) -> str:
 
 
 @pytest.fixture
+def testdata_dir() -> Path:
+    return TESTDATA
+
+
+@pytest.fixture
 def page_html() -> str:
     return read_testdata("page.html")
 

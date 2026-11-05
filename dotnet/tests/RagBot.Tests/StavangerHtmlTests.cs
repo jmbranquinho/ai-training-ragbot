@@ -43,6 +43,7 @@ public sealed class StavangerHtmlTests
     [InlineData("Main menu")]
     [InlineData("Stavanger kommune")]
     [InlineData("piktogram")]
+    [InlineData("PDF-visning")]
     [InlineData(" ")]
     public void ParsePage_strips_noise(string noise)
     {
