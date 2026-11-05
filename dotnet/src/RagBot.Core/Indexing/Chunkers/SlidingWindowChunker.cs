@@ -25,6 +25,14 @@ public sealed class SlidingWindowChunker : IChunker
         _overlap = overlap;
     }
 
+    public string Signature
+    {
+        get
+        {
+            return $"{Name}:{_size}:{_overlap}";
+        }
+    }
+
     public IReadOnlyList<Chunk> Chunk(Document document)
     {
         ArgumentNullException.ThrowIfNull(document);

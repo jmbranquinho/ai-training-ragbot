@@ -5,7 +5,9 @@
 // them together. (A bigger app would use Microsoft.Extensions.DependencyInjection here.)
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using RagBot.Core;
 using RagBot.Core.Indexing;
+using RagBot.Core.Indexing.Adapters;
 using RagBot.Core.Indexing.Chunkers;
 using RagBot.Core.Indexing.Ports;
 using RagBot.Core.Ingestion;
@@ -33,8 +35,16 @@ internal static class Program
                      --overlap <n>       window: overlap (default: 200)
                      --data-dir <path>   default: data/raw
                      --show <text>       print the chunks of the first page whose URL contains this
+          index    Chunk, embed and store pages in pgvector
+                     (same --strategy/--max-chars/--size/--overlap/--data-dir options as chunk)
+                     --rebuild           drop the index first
+          search   Show the chunks most similar to a question
+                     <question>          the question, in quotes
+                     --top-k <n>         default: 5
           chat     Ask questions (not implemented yet)
         """;
+
+    private const string DbSchema = "dotnet"; // the Python version uses "python" in the same database
 
     public static async Task<int> Main(string[] args)
     {
@@ -51,6 +61,12 @@ internal static class Program
                 return 0;
             case "chunk":
                 await RunChunkAsync(args).ConfigureAwait(false);
+                return 0;
+            case "index":
+                await RunIndexAsync(args).ConfigureAwait(false);
+                return 0;
+            case "search" when args.Length > 1:
+                await RunSearchAsync(args[1], GetIntOption(args, "--top-k", 5)).ConfigureAwait(false);
                 return 0;
             case "chat":
                 Console.WriteLine("'chat' is not implemented yet. Coming in later steps.");
@@ -96,12 +112,64 @@ internal static class Program
             + $"{report.Unchanged.Count} unchanged. Files in {dataDir}");
     }
 
-    /// <summary>Chunk every stored page and print size statistics (nothing is saved yet).</summary>
-    private static async Task RunChunkAsync(string[] args)
+    private static async Task RunIndexAsync(string[] args)
     {
-        IChunker chunker = GetOption(args, "--strategy", "headings") == "window"
+        var settings = Settings.Load();
+        var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Path.Combine("data", "raw")));
+
+        using var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.AddSimpleConsole(options => options.SingleLine = true);
+        });
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
+        var service = new IndexService(
+            new FileDocumentStore(dataDir),
+            MakeChunker(args),
+            MakeEmbedder(settings),
+            index,
+            loggerFactory.CreateLogger<IndexService>());
+
+        var report = await service.RunAsync(rebuild: args.Contains("--rebuild")).ConfigureAwait(false);
+
+        loggerFactory.Dispose(); // flush the console logger before printing the summary
+        Console.WriteLine(
+            $"\n{report.Indexed.Count} pages indexed ({report.ChunksEmbedded} chunks embedded), "
+            + $"{report.Unchanged.Count} unchanged, {report.Deleted.Count} removed.");
+    }
+
+    /// <summary>Quick check of the index. Step 6 turns this into a proper retriever.</summary>
+    private static async Task RunSearchAsync(string question, int topK)
+    {
+        var settings = Settings.Load();
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
+        var queryVector = (await MakeEmbedder(settings).EmbedAsync([question]).ConfigureAwait(false))[0];
+
+        var hits = await index.SearchAsync(queryVector, topK).ConfigureAwait(false);
+        for (var i = 0; i < hits.Count; i++)
+        {
+            var firstLine = hits[i].Chunk.Text.Split('\n')[0];
+            var score = hits[i].Score.ToString("0.000", CultureInfo.InvariantCulture);
+            Console.WriteLine($"{i + 1}. [{score}] {firstLine}\n   {hits[i].Chunk.DocumentUrl}");
+        }
+    }
+
+    private static AzureOpenAIEmbedder MakeEmbedder(Settings settings)
+    {
+        return new AzureOpenAIEmbedder(
+            settings.AzureOpenAIEndpoint, settings.EmbeddingDeployment, settings.EmbeddingDimensions, settings.AzureOpenAIApiKey);
+    }
+
+    private static IChunker MakeChunker(string[] args)
+    {
+        return GetOption(args, "--strategy", "headings") == "window"
             ? new SlidingWindowChunker(GetIntOption(args, "--size", 1000), GetIntOption(args, "--overlap", 200))
             : new HeadingChunker(GetIntOption(args, "--max-chars", 1500));
+    }
+
+    /// <summary>Chunk every stored page and print size statistics (nothing is saved).</summary>
+    private static async Task RunChunkAsync(string[] args)
+    {
+        var chunker = MakeChunker(args);
         var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Path.Combine("data", "raw")));
         var show = GetOption(args, "--show", "");
 

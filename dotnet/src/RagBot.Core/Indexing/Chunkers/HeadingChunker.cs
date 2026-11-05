@@ -22,6 +22,14 @@ public sealed partial class HeadingChunker : IChunker
         _maxChars = maxChars;
     }
 
+    public string Signature
+    {
+        get
+        {
+            return $"{Name}:{_maxChars}";
+        }
+    }
+
     public IReadOnlyList<Chunk> Chunk(Document document)
     {
         ArgumentNullException.ThrowIfNull(document);

@@ -61,6 +61,15 @@ Other commands follow the same pattern: replace `up -d --wait` with
 | Database / user / password | `ragbot` / `ragbot` / `ragbot` |
 | Schemas | `python` and `dotnet`: one per implementation, so they don't overwrite each other |
 
+## Azure AI Foundry
+
+Embeddings (and later the chat model) come from Azure AI Foundry / Azure OpenAI. Copy
+[.env.example](.env.example) to `.env` (git-ignored) and set at least `AZURE_OPENAI_ENDPOINT`.
+Both implementations read the same file.
+
+Leave `AZURE_OPENAI_API_KEY` empty to sign in with Entra ID instead: run `az login`, and give
+yourself the **Cognitive Services OpenAI User** role on the resource. No secret is stored on disk.
+
 ## Run it
 
 ### Python
@@ -70,6 +79,8 @@ cd python
 uv sync                 # create .venv and install exact versions from uv.lock
 uv run ragbot ingest --max-pages 5   # scrape 5 pages into python/data/raw/
 uv run ragbot chunk --strategy headings --show farlig-avfall   # chunk stats + one page's chunks
+uv run ragbot index                  # embed + store in pgvector (unchanged pages are skipped)
+uv run ragbot search "Hvor leverer jeg maling?"
 uv run pytest           # tests
 uv run ruff format .    # format
 uv run ruff check .     # lint
@@ -83,6 +94,8 @@ cd dotnet
 dotnet build                                  # also runs analyzers (warnings = errors)
 dotnet run --project src/RagBot.Cli -- ingest --max-pages 5   # into dotnet/data/raw/
 dotnet run --project src/RagBot.Cli -- chunk --strategy window --size 1000 --overlap 200
+dotnet run --project src/RagBot.Cli -- index --data-dir ../python/data/raw   # same files, own schema
+dotnet run --project src/RagBot.Cli -- search "Hvor leverer jeg maling?"
 dotnet test                                   # tests
 dotnet format                                 # format
 ```

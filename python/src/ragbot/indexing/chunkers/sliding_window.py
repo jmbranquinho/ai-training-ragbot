@@ -20,6 +20,10 @@ class SlidingWindowChunker:
         self._size = size
         self._overlap = overlap
 
+    @property
+    def signature(self) -> str:
+        return f"{self.name}:{self._size}:{self._overlap}"
+
     def chunk(self, document: Document) -> list[Chunk]:
         text = document.content
         chunks: list[Chunk] = []

@@ -21,6 +21,10 @@ class HeadingChunker:
             raise ValueError("max_chars must be at least 100")
         self._max_chars = max_chars
 
+    @property  # ≈ a get-only C# property
+    def signature(self) -> str:
+        return f"{self.name}:{self._max_chars}"
+
     def chunk(self, document: Document) -> list[Chunk]:
         chunks: list[Chunk] = []
         for heading, body in _sections(document.content, document.title):
