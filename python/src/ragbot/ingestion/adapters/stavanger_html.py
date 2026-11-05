@@ -25,6 +25,7 @@ _NOISE_SELECTORS = [
     ".formarea",  # "was this page helpful?"
     "img",
     "iframe",  # embedded PDF viewer; parsers disagree on its fallback content
+    ".contactpersonblock",  # named employees' phone/e-mail: personal data, not useful answers
 ]
 # Teaser cards wrap a heading + paragraph in one big <a>. Converted as-is, each card becomes
 # a single markdown link with the heading inside it, which is poor input for embeddings.

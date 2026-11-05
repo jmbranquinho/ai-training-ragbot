@@ -69,6 +69,7 @@ Other commands follow the same pattern: replace `up -d --wait` with
 cd python
 uv sync                 # create .venv and install exact versions from uv.lock
 uv run ragbot ingest --max-pages 5   # scrape 5 pages into python/data/raw/
+uv run ragbot chunk --strategy headings --show farlig-avfall   # chunk stats + one page's chunks
 uv run pytest           # tests
 uv run ruff format .    # format
 uv run ruff check .     # lint
@@ -81,6 +82,7 @@ uv run pyright          # type check
 cd dotnet
 dotnet build                                  # also runs analyzers (warnings = errors)
 dotnet run --project src/RagBot.Cli -- ingest --max-pages 5   # into dotnet/data/raw/
+dotnet run --project src/RagBot.Cli -- chunk --strategy window --size 1000 --overlap 200
 dotnet test                                   # tests
 dotnet format                                 # format
 ```
@@ -113,6 +115,23 @@ read each other's files.
 Re-running `ingest` still downloads every page (the site sends no ETag/Last-Modified
 headers), but it compares content hashes and only rewrites pages that changed. It reports
 each page as **new**, **updated** or **unchanged**.
+
+### Chunking
+
+Two strategies sit behind the `Chunker` interface (`indexing/chunkers/`):
+
+| Strategy | How | Settings |
+|---|---|---|
+| `headings` (default) | one chunk per markdown section; long sections split at paragraph breaks | `--max-chars` (1500) |
+| `window` | fixed-size windows over the whole page, cut at word boundaries | `--size` (1000), `--overlap` (200) |
+
+Each chunk's text starts with a context header (`Page title > Heading > Subheading`), and the
+chunk keeps its URL, title, heading path and position for citations. Sizes are counted in
+characters, so both implementations split identically.
+
+Before chunking, pages with identical content are de-duplicated (`indexing/deduplicate`): the
+site serves two long plans in full on every chapter URL, so 159 stored pages contain only 61
+unique ones. The copy with the shortest URL is kept.
 
 ## Python ↔ .NET cheat sheet
 

@@ -44,6 +44,8 @@ public sealed class StavangerHtmlTests
     [InlineData("Stavanger kommune")]
     [InlineData("piktogram")]
     [InlineData("PDF-visning")]
+    [InlineData("Ola Testesen")] // contact person (personal data)
+    [InlineData("999 99 999")]
     [InlineData(" ")]
     public void ParsePage_strips_noise(string noise)
     {

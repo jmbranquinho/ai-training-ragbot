@@ -40,6 +40,8 @@ def test_parse_page_strips_noise(page_html: str) -> None:
         "Stavanger kommune",
         "piktogram",
         "PDF-visning",
+        "Ola Testesen",  # contact person (personal data)
+        "999 99 999",
         "\xa0",
     ]
     for noise in noise_texts:

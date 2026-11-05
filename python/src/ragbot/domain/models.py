@@ -34,11 +34,12 @@ class Document:
 class Chunk:
     """A piece of a Document. Keeps a pointer back to its source for citations."""
 
-    id: str
+    id: str  # "<document url>#<position>": stable, so re-indexing can overwrite
     document_url: str
     document_title: str
-    text: str
+    text: str  # what gets embedded: a context header line + the chunk body
     position: int  # order of this chunk within its document
+    heading: str | None = None  # heading path inside the page, e.g. "Levering > Gjenbruk"
     metadata: dict[str, str] = field(default_factory=dict)
 
 

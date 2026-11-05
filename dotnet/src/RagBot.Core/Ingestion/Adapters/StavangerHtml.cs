@@ -13,8 +13,10 @@ public static partial class StavangerHtml
 {
     // Elements inside <main> that are page chrome, not content.
     // iframe: embedded PDF viewer; parsers disagree on its fallback content.
+    // .contactpersonblock: named employees' phone/e-mail: personal data, not useful answers.
     private const string NoiseSelectors =
-        "script, style, form, aside.byline, ul.anchorlinks, .image-wrapper, .formarea, img, iframe";
+        "script, style, form, aside.byline, ul.anchorlinks, .image-wrapper, .formarea, img, iframe, "
+        + ".contactpersonblock";
 
     // Teaser cards wrap a heading + paragraph in one big <a>. Converted as-is, each card becomes
     // a single markdown link with the heading inside it, which is poor input for embeddings.
