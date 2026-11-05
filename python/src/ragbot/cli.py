@@ -11,9 +11,13 @@ from pathlib import Path
 
 import httpx
 
+from ragbot.azure_openai import create_client
+from ragbot.chat.adapters.azure_answer_generator import AzureOpenAIAnswerGenerator
 from ragbot.chat.ports import Retriever
 from ragbot.chat.retrieval import HybridRetriever, KeywordRetriever, VectorRetriever
+from ragbot.chat.service import ChatService
 from ragbot.config import Settings
+from ragbot.domain import Answer
 from ragbot.indexing.adapters.azure_embedder import AzureOpenAIEmbedder
 from ragbot.indexing.adapters.pgvector_index import PgVectorChunkIndex
 from ragbot.indexing.chunkers import HeadingChunker, SlidingWindowChunker
@@ -115,13 +119,35 @@ def make_retriever(settings: Settings, mode: str) -> Retriever:
     return HybridRetriever(make_embedder(settings), chunk_index)
 
 
+def make_chat_service(settings: Settings, mode: str, top_k: int) -> ChatService:
+    client = create_client(settings.azure_openai_endpoint, settings.azure_openai_api_key)
+    generator = AzureOpenAIAnswerGenerator(client, settings.chat_deployment)
+    return ChatService(make_retriever(settings, mode), generator, top_k)
+
+
+def print_answer(answer: Answer) -> None:
+    print(f"\n{answer.text}")
+    if answer.sources:
+        print("\nKilder:")  # "Sources"
+        for i, source in enumerate(answer.sources, start=1):
+            where = f" > {source.heading}" if source.heading else ""
+            print(f"  {i}. {source.document_title}{where}\n     {source.document_url}")
+
+
+def ask(question: str, mode: str, top_k: int) -> None:
+    print_answer(make_chat_service(Settings.load(), mode, top_k).ask(question))
+
+
+def chat(mode: str, top_k: int) -> None:
+    service = make_chat_service(Settings.load(), mode, top_k)
+    print("Spør om renovasjon og miljø i Stavanger kommune. Tom linje avslutter.")
+    while question := input("\n> ").strip():  # loop until an empty line
+        print_answer(service.ask(question))
+
+
 def make_embedder(settings: Settings) -> AzureOpenAIEmbedder:
-    return AzureOpenAIEmbedder(
-        endpoint=settings.azure_openai_endpoint,
-        deployment=settings.embedding_deployment,
-        dimensions=settings.embedding_dimensions,
-        api_key=settings.azure_openai_api_key,
-    )
+    client = create_client(settings.azure_openai_endpoint, settings.azure_openai_api_key)
+    return AzureOpenAIEmbedder(client, settings.embedding_deployment, settings.embedding_dimensions)
 
 
 def add_chunker_args(parser: argparse.ArgumentParser) -> None:
@@ -163,7 +189,12 @@ def main() -> None:
     search_cmd.add_argument("--top-k", type=int, default=5)
     search_cmd.add_argument("--mode", choices=["vector", "keyword", "hybrid"], default="hybrid")
 
-    sub.add_parser("chat", help="Ask questions (not implemented yet)")
+    ask_cmd = sub.add_parser("ask", help="Answer one question with sources")
+    ask_cmd.add_argument("question")
+    chat_cmd = sub.add_parser("chat", help="Interactive chat (empty line quits)")
+    for cmd in (ask_cmd, chat_cmd):
+        cmd.add_argument("--top-k", type=int, default=5, help="chunks given to the model")
+        cmd.add_argument("--mode", choices=["vector", "keyword", "hybrid"], default="hybrid")
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -179,8 +210,10 @@ def main() -> None:
         index(make_chunker(args), args.data_dir, args.rebuild)
     elif args.command == "search":
         search(args.question, args.top_k, args.mode)
-    else:
-        print(f"'{args.command}' is not implemented yet. Coming in later steps.")
+    elif args.command == "ask":
+        ask(args.question, args.mode, args.top_k)
+    elif args.command == "chat":
+        chat(args.mode, args.top_k)
 
 
 if __name__ == "__main__":  # lets you also run: python -m ragbot.cli

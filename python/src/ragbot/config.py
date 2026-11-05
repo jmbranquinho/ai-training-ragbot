@@ -16,6 +16,7 @@ class Settings:
     azure_openai_api_key: str | None  # None → sign in with Entra ID (az login)
     embedding_deployment: str
     embedding_dimensions: int
+    chat_deployment: str
     postgres_conninfo: str
 
     @classmethod
@@ -35,5 +36,6 @@ class Settings:
             azure_openai_api_key=env("AZURE_OPENAI_API_KEY") or None,
             embedding_deployment=env("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small"),
             embedding_dimensions=int(env("EMBEDDING_DIMENSIONS", "1536")),
+            chat_deployment=env("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4.1-mini"),
             postgres_conninfo=conninfo,
         )

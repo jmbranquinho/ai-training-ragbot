@@ -6,8 +6,11 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using RagBot.Core;
+using RagBot.Core.Chat;
+using RagBot.Core.Chat.Adapters;
 using RagBot.Core.Chat.Ports;
 using RagBot.Core.Chat.Retrieval;
+using RagBot.Core.Domain;
 using RagBot.Core.Indexing;
 using RagBot.Core.Indexing.Adapters;
 using RagBot.Core.Indexing.Chunkers;
@@ -44,7 +47,11 @@ internal static class Program
                      <question>          the question, in quotes
                      --top-k <n>         default: 5
                      --mode <name>       vector | keyword | hybrid (default: hybrid)
-          chat     Ask questions (not implemented yet)
+          ask      Answer one question with sources
+                     <question>          the question, in quotes
+                     --top-k <n>         chunks given to the model (default: 5)
+                     --mode <name>       vector | keyword | hybrid (default: hybrid)
+          chat     Interactive chat (empty line quits); same --top-k/--mode options as ask
         """;
 
     private const string DbSchema = "dotnet"; // the Python version uses "python" in the same database
@@ -71,8 +78,11 @@ internal static class Program
             case "search" when args.Length > 1:
                 await RunSearchAsync(args[1], GetIntOption(args, "--top-k", 5), GetOption(args, "--mode", "hybrid")).ConfigureAwait(false);
                 return 0;
+            case "ask" when args.Length > 1:
+                await RunAskAsync(args[1], args).ConfigureAwait(false);
+                return 0;
             case "chat":
-                Console.WriteLine("'chat' is not implemented yet. Coming in later steps.");
+                await RunChatAsync(args).ConfigureAwait(false);
                 return 0;
             default:
                 Console.Error.WriteLine(Usage);
@@ -140,17 +150,11 @@ internal static class Program
             + $"{report.Unchanged.Count} unchanged, {report.Deleted.Count} removed.");
     }
 
-    /// <summary>Quick check of the index. Step 6 turns this into a proper retriever.</summary>
     private static async Task RunSearchAsync(string question, int topK, string mode)
     {
         var settings = Settings.Load();
         using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
-        IRetriever retriever = mode switch
-        {
-            "keyword" => new KeywordRetriever(index), // no embedding call needed
-            "vector" => new VectorRetriever(MakeEmbedder(settings), index),
-            _ => new HybridRetriever(MakeEmbedder(settings), index),
-        };
+        var retriever = MakeRetriever(settings, mode, index);
 
         var hits = await retriever.RetrieveAsync(question, topK).ConfigureAwait(false);
         for (var i = 0; i < hits.Count; i++)
@@ -161,10 +165,74 @@ internal static class Program
         }
     }
 
+    private static async Task RunAskAsync(string question, string[] args)
+    {
+        var settings = Settings.Load();
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
+        var service = MakeChatService(settings, args, index);
+
+        PrintAnswer(await service.AskAsync(question).ConfigureAwait(false));
+    }
+
+    private static async Task RunChatAsync(string[] args)
+    {
+        var settings = Settings.Load();
+        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, DbSchema, settings.EmbeddingDimensions);
+        var service = MakeChatService(settings, args, index);
+
+        Console.WriteLine("Spør om renovasjon og miljø i Stavanger kommune. Tom linje avslutter.");
+        while (true)
+        {
+            Console.Write("\n> ");
+            var question = Console.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(question)) // empty line (or end of input) quits
+            {
+                return;
+            }
+
+            PrintAnswer(await service.AskAsync(question).ConfigureAwait(false));
+        }
+    }
+
+    private static ChatService MakeChatService(Settings settings, string[] args, PgVectorChunkIndex index)
+    {
+        var client = AzureOpenAIClientFactory.Create(settings.AzureOpenAIEndpoint, settings.AzureOpenAIApiKey);
+        var generator = new AzureOpenAIAnswerGenerator(client, settings.ChatDeployment);
+        var retriever = MakeRetriever(settings, GetOption(args, "--mode", "hybrid"), index);
+        return new ChatService(retriever, generator, GetIntOption(args, "--top-k", 5));
+    }
+
+    private static void PrintAnswer(Answer answer)
+    {
+        Console.WriteLine($"\n{answer.Text}");
+        if (answer.Sources.Count == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine("\nKilder:"); // "Sources"
+        for (var i = 0; i < answer.Sources.Count; i++)
+        {
+            var source = answer.Sources[i];
+            var where = source.Heading is null ? "" : $" > {source.Heading}";
+            Console.WriteLine($"  {i + 1}. {source.DocumentTitle}{where}\n     {source.DocumentUrl}");
+        }
+    }
+
+    private static IRetriever MakeRetriever(Settings settings, string mode, PgVectorChunkIndex index)
+    {
+        return mode switch
+        {
+            "keyword" => new KeywordRetriever(index), // no embedding call needed
+            "vector" => new VectorRetriever(MakeEmbedder(settings), index),
+            _ => new HybridRetriever(MakeEmbedder(settings), index),
+        };
+    }
+
     private static AzureOpenAIEmbedder MakeEmbedder(Settings settings)
     {
-        return new AzureOpenAIEmbedder(
-            settings.AzureOpenAIEndpoint, settings.EmbeddingDeployment, settings.EmbeddingDimensions, settings.AzureOpenAIApiKey);
+        var client = AzureOpenAIClientFactory.Create(settings.AzureOpenAIEndpoint, settings.AzureOpenAIApiKey);
+        return new AzureOpenAIEmbedder(client, settings.EmbeddingDeployment, settings.EmbeddingDimensions);
     }
 
     private static IChunker MakeChunker(string[] args)

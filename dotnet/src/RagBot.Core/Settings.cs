@@ -7,12 +7,14 @@ namespace RagBot.Core;
 /// <param name="AzureOpenAIEndpoint">Endpoint of the Azure OpenAI / AI Foundry resource.</param>
 /// <param name="EmbeddingDeployment">Name of the embedding model deployment.</param>
 /// <param name="EmbeddingDimensions">Vector size requested from the model.</param>
+/// <param name="ChatDeployment">Name of the chat model deployment.</param>
 /// <param name="PostgresConnectionString">Npgsql connection string.</param>
 public sealed record Settings(
     string AzureOpenAIEndpoint,
     string? AzureOpenAIApiKey,
     string EmbeddingDeployment,
     int EmbeddingDimensions,
+    string ChatDeployment,
     string PostgresConnectionString)
 {
     public static Settings Load()
@@ -32,6 +34,7 @@ public sealed record Settings(
             apiKey.Length > 0 ? apiKey : null,
             Env("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small"),
             int.Parse(Env("EMBEDDING_DIMENSIONS", "1536"), System.Globalization.CultureInfo.InvariantCulture),
+            Env("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4.1-mini"),
             connection);
     }
 

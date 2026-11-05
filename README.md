@@ -91,6 +91,8 @@ uv run ragbot ingest --max-pages 5   # scrape 5 pages into python/data/raw/
 uv run ragbot chunk --strategy headings --show farlig-avfall   # chunk stats + one page's chunks
 uv run ragbot index                  # embed + store in pgvector (unchanged pages are skipped)
 uv run ragbot search "Hvor leverer jeg maling?" --mode hybrid --top-k 5   # or vector / keyword
+uv run ragbot ask "Hvor leverer jeg maling?"   # answer with sources
+uv run ragbot chat                             # interactive; empty line quits
 uv run pytest           # tests
 uv run ruff format .    # format
 uv run ruff check .     # lint
@@ -106,6 +108,8 @@ dotnet run --project src/RagBot.Cli -- ingest --max-pages 5   # into dotnet/data
 dotnet run --project src/RagBot.Cli -- chunk --strategy window --size 1000 --overlap 200
 dotnet run --project src/RagBot.Cli -- index --data-dir ../python/data/raw   # same files, own schema
 dotnet run --project src/RagBot.Cli -- search "Hvor leverer jeg maling?"
+dotnet run --project src/RagBot.Cli -- ask "Hvor leverer jeg maling?"
+dotnet run --project src/RagBot.Cli -- chat
 dotnet test                                   # tests
 dotnet format                                 # format
 ```
@@ -168,6 +172,21 @@ Three retrievers sit behind the `Retriever` interface (`chat/retrieval`), each w
 
 Hybrid scores are RRF scores (around 0.01–0.03), not similarities, so they can't be compared
 with the other modes or used as a relevance threshold.
+
+### Answers
+
+`ask` / `chat` retrieve `--top-k` chunks and send them, numbered, to the chat model
+(`gpt-4.1-mini`, temperature 0) with the question. The prompt (`chat/prompt`, pinned by
+[testdata/chat/expected-prompt.txt](testdata/chat/expected-prompt.txt)) tells the model to
+answer only from the sources, in the question's language, cite them as `[n]`, and reply as
+JSON `{"language", "answer", "sources"}`.
+
+Guarding against hallucination:
+- No chunks retrieved → "Jeg vet ikke" without calling the model.
+- The model is told to say it doesn't know when the sources don't cover the question.
+- Cited numbers are checked against the real sources: unknown numbers are dropped, and the
+  `[n]` markers are renumbered to match the printed source list. An answer without any valid
+  source counts as unknown.
 
 ## Python ↔ .NET cheat sheet
 
