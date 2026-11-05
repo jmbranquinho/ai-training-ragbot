@@ -1,0 +1,17 @@
+Azure resources for this project (no secrets here)
+=================================================
+
+Subscription     Visual Studio Professional Subscription
+Resource group   rg-ragbot
+Foundry resource ragbot-foundry
+Foundry project  ragbot-foundry/ragbot-project
+Region / SKU     Sweden Central / S0 (pay per use)
+Endpoint         https://ragbot-foundry.services.ai.azure.com/
+                 (Azure OpenAI endpoint: https://ragbot-foundry.openai.azure.com/)
+
+Model deployments (Global Standard)
+  text-embedding-3-small   embeddings (Step 5), 1536 dimensions
+  gpt-4.1-mini             chat / answers (Step 7)
+
+Access: Entra ID (az login) with the "Cognitive Services OpenAI User" role, no API key.
+Local settings live in .env (git-ignored); template in .env.example.

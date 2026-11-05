@@ -42,9 +42,19 @@ wsl --terminate Ubuntu-24.04
 Docker's official apt repository, enables it as a service, and stops Ubuntu from inheriting the
 Windows `PATH` (otherwise Windows-side Docker tools, such as Rancher Desktop's, interfere).
 
+By default WSL shuts a distro down a few seconds after the last `wsl` command ends, which
+also stops Postgres while the apps are still using it. To keep it running, add this to
+`%UserProfile%\.wslconfig` and run `wsl --shutdown` once to apply it (it affects all WSL
+distros; stop them yourself with `wsl --shutdown`):
+
+```
+[general]
+instanceIdleTimeout=-1
+```
+
 ### Daily use
 
-WSL shuts Ubuntu down when it's idle, so start the database before running the apps:
+Start the database before running the apps (after a reboot or `wsl --shutdown`):
 
 ```bash
 wsl -d Ubuntu-24.04 -u root --cd "/mnt/c/dev/ved/AI Training" -- docker compose up -d --wait

@@ -157,7 +157,8 @@ def main() -> None:
 
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for noisy in ("httpx", "azure"):  # hide one log line per HTTP request
+    # hide one log line per HTTP request (openai 3.x uses httpx2, our scraper uses httpx)
+    for noisy in ("httpx", "httpx2", "azure", "openai"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     if args.command == "ingest":
