@@ -24,7 +24,7 @@ docs/     assignment text and notes
 ```bash
 cd python
 uv sync                 # create .venv and install exact versions from uv.lock
-uv run ragbot ingest    # run the CLI
+uv run ragbot ingest --max-pages 5 --show   # scrape 5 pages, print the first one
 uv run pytest           # tests
 uv run ruff format .    # format
 uv run ruff check .     # lint
@@ -36,7 +36,7 @@ uv run pyright          # type check
 ```bash
 cd dotnet
 dotnet build                                  # also runs analyzers (warnings = errors)
-dotnet run --project src/RagBot.Cli -- ingest # run the CLI
+dotnet run --project src/RagBot.Cli -- ingest --max-pages 5 --show
 dotnet test                                   # tests
 dotnet format                                 # format
 ```

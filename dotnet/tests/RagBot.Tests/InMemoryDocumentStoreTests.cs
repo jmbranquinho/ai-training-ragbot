@@ -1,14 +1,16 @@
 // Mirrors python/tests/test_in_memory_store.py.
 using RagBot.Core.Domain;
-using RagBot.Core.Ingestion;
 using RagBot.Core.Ingestion.Adapters;
+using RagBot.Core.Ingestion.Ports;
 
 namespace RagBot.Tests;
 
 public sealed class InMemoryDocumentStoreTests
 {
-    private static Document MakeDocument(string url = "https://example.com/a") =>
-        new(new Uri(url), "A", "# Hello", DateTimeOffset.UtcNow);
+    private static Document MakeDocument(string url = "https://example.com/a")
+    {
+        return new Document(new Uri(url), "A", "# Hello", DateTimeOffset.UtcNow);
+    }
 
     [Fact]
     public async Task Saved_document_can_be_retrieved_by_url()

@@ -11,6 +11,12 @@ from typing import Protocol
 from ragbot.domain import Document
 
 
+class UrlSource(Protocol):
+    def discover(self) -> list[str]:
+        """Return the URLs that should be scraped."""
+        ...
+
+
 class Scraper(Protocol):
     def fetch(self, urls: Iterable[str]) -> Iterator[Document]:
         """Fetch pages and return them as Documents (≈ IEnumerable<Document> with yield)."""

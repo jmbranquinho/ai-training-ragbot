@@ -1,12 +1,7 @@
-// Interfaces for the ingestion feature. Mirrors python/src/ragbot/ingestion/ports.py.
+// Mirrors DocumentStore in python/src/ragbot/ingestion/ports.py.
 using RagBot.Core.Domain;
 
-namespace RagBot.Core.Ingestion;
-
-public interface IScraper
-{
-    IAsyncEnumerable<Document> FetchAsync(IEnumerable<Uri> urls, CancellationToken ct = default);
-}
+namespace RagBot.Core.Ingestion.Ports;
 
 public interface IDocumentStore
 {

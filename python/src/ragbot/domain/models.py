@@ -4,8 +4,9 @@
 value equality, a generated constructor, and immutable fields.
 """
 
+import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 
 
 @dataclass(frozen=True)
@@ -14,9 +15,19 @@ class Document:
 
     url: str
     title: str
-    content: str
+    content: str  # markdown
     fetched_at: datetime
     section: str | None = None  # `str | None` ≈ `string?` in C#
+    updated_on: date | None = None  # "last updated" date shown on the page, if any
+
+    @property
+    def content_hash(self) -> str:
+        """SHA-256 of the content. Used to detect whether a page changed since last run.
+
+        The site sends no ETag/Last-Modified headers, so hashing what we extracted is the
+        most reliable change signal we have.
+        """
+        return hashlib.sha256(self.content.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)

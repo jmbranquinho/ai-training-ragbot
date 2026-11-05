@@ -2,4 +2,10 @@
 
   <!-- Domain, ports (interfaces) and adapters. Shared settings live in Directory.Build.props. -->
 
+  <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="1.9.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+    <PackageReference Include="ReverseMarkdown" Version="6.3.0" />
+  </ItemGroup>
+
 </Project>

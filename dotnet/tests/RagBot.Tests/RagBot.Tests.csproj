@@ -22,4 +22,9 @@
     <ProjectReference Include="..\..\src\RagBot.Core\RagBot.Core.csproj" />
   </ItemGroup>
 
+  <!-- Shared HTML fixtures (same files the Python tests use), copied next to the test dll -->
+  <ItemGroup>
+    <None Include="..\..\..\testdata\**\*" LinkBase="testdata" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

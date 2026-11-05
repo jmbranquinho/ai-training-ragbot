@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using RagBot.Core.Domain;
+using RagBot.Core.Ingestion.Ports;
 
 namespace RagBot.Core.Ingestion.Adapters;
 
@@ -16,8 +17,10 @@ public sealed class InMemoryDocumentStore : IDocumentStore
         return Task.CompletedTask;
     }
 
-    public Task<Document?> GetAsync(Uri url, CancellationToken ct = default) =>
-        Task.FromResult(_documents.GetValueOrDefault(url));
+    public Task<Document?> GetAsync(Uri url, CancellationToken ct = default)
+    {
+        return Task.FromResult(_documents.GetValueOrDefault(url));
+    }
 
     public async IAsyncEnumerable<Document> AllAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
