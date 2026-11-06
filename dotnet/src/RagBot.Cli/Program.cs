@@ -20,12 +20,12 @@ using RagBot.Core.Indexing.Chunkers;
 using RagBot.Core.Indexing.Ports;
 using RagBot.Core.Ingestion;
 using RagBot.Core.Ingestion.Adapters;
+using RagBot.Core.Ingestion.Ports;
 
 namespace RagBot.Cli;
 
 internal static class Program
 {
-    private const string BaseUrl = "https://www.stavanger.kommune.no";
     private const string UserAgent = "RagBot-training/0.1";
     private const string Usage = """
         Usage: ragbot <command> [options]
@@ -37,7 +37,7 @@ internal static class Program
                      --max-pages <n>     0 = no limit (default: 10)
                      --delay <seconds>   between requests (default: 1.0)
                      --only-new          skip pages already stored (resume an interrupted crawl)
-                     --data-dir <path>   where pages are stored (default: data/raw)
+                     --data-dir <path>   where pages are stored (default: the site's folder)
           update   ingest + index in one go; takes the options of both
                      e.g. update --section all --max-pages 0 --only-new
           chunk    Chunk stored pages and print statistics
@@ -45,7 +45,7 @@ internal static class Program
                      --max-chars <n>     headings: max body size (default: 1500)
                      --size <n>          window: window size (default: 1000)
                      --overlap <n>       window: overlap (default: 200)
-                     --data-dir <path>   default: data/raw
+                     --data-dir <path>   default: the site's folder
                      --show <text>       print the chunks of the first page whose URL contains this
           index    Chunk, embed and store pages in pgvector
                      (same --strategy/--max-chars/--size/--overlap/--data-dir options as chunk)
@@ -53,23 +53,27 @@ internal static class Program
           search   Show the chunks most relevant to a question
                      <question>          the question, in quotes
                      --top-k <n>         default: 5
-                     --mode <name>       vector | keyword | hybrid (default: hybrid)
+                     --mode <name>       vector | keyword | hybrid (default: per site)
           ask      Answer one question with sources
                      <question>          the question, in quotes
                      --top-k <n>         chunks given to the model (default: 5)
-                     --mode <name>       vector | keyword | hybrid (default: hybrid)
+                     --mode <name>       vector | keyword | hybrid (default: per site)
           chat     Interactive chat (empty line quits); same --top-k/--mode options as ask
-          eval     Evaluate on eval/questions.json
+          eval     Evaluate on the site's question set (--questions <file> to override)
                      retrieval           hit@k and MRR per mode
                        --modes <list>    default: vector,keyword,hybrid
                      answers             answer quality, graded by an LLM judge
                        --mode / --top-k  as for ask
 
-        index, search, ask, chat and eval take --schema <name> (default: dotnet) to pick an
-        index variant, e.g. one built with other chunking settings.
-        """;
+        index, search, ask, chat and eval take --schema <name> to pick an index variant, e.g.
+        one built with other chunking settings.
 
-    private const string DbSchema = "dotnet"; // the Python version uses "python" in the same database
+        Every command takes --site <name> to pick the website (default: stavanger):
+          stavanger      www.stavanger.kommune.no; data/raw, schema dotnet, eval/questions.json
+          satisfactory   satisfactory.wiki.gg; data/satisfactory, schema dotnet_satisfactory,
+                         eval/questions-satisfactory.json. --section is ignored: the wiki's
+                         article list (Special:AllPages) is crawled instead of a site map.
+        """;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -102,7 +106,7 @@ internal static class Program
                 await RunIndexAsync(args).ConfigureAwait(false);
                 return 0;
             case "search" when args.Length > 1:
-                await RunSearchAsync(args[1], GetIntOption(args, "--top-k", 5), GetOption(args, "--mode", "hybrid"), GetOption(args, "--schema", DbSchema)).ConfigureAwait(false);
+                await RunSearchAsync(args[1], args).ConfigureAwait(false);
                 return 0;
             case "ask" when args.Length > 1:
                 await RunAskAsync(args[1], args).ConfigureAwait(false);
@@ -130,7 +134,7 @@ internal static class Program
         int? maxPages = maxPagesOption > 0 ? maxPagesOption : null; // 0 = no limit
 
         var delaySeconds = double.Parse(GetOption(args, "--delay", "1.0"), CultureInfo.InvariantCulture);
-        var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Path.Combine("data", "raw")));
+        var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Site(args).DataDir));
 
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
@@ -139,15 +143,32 @@ internal static class Program
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
 
-        var robots = await RobotsPolicy.LoadAsync(client, new Uri(BaseUrl), UserAgent).ConfigureAwait(false);
-        var source = new SiteMapUrlSource(
-            client,
-            robots,
-            new Uri($"{BaseUrl}/nettstedskart/"),
-            pathPrefix,
-            loggerFactory.CreateLogger<SiteMapUrlSource>());
-        var scraper = new HttpScraper(
-            client, robots, loggerFactory.CreateLogger<HttpScraper>(), TimeSpan.FromSeconds(delaySeconds));
+        var site = Site(args);
+        var delay = TimeSpan.FromSeconds(delaySeconds);
+        var robots = await RobotsPolicy.LoadAsync(client, site.BaseUrl, UserAgent).ConfigureAwait(false);
+
+        // The two sites differ in how pages are found and how their HTML is read; the rest of
+        // the pipeline is the same.
+        IUrlSource source;
+        IPageParser parser;
+        if (site == SiteProfile.Satisfactory)
+        {
+            source = new MediaWikiAllPagesUrlSource(
+                client, robots, site.BaseUrl, loggerFactory.CreateLogger<MediaWikiAllPagesUrlSource>(), delay);
+            parser = new MediaWikiPageParser();
+        }
+        else
+        {
+            source = new SiteMapUrlSource(
+                client,
+                robots,
+                new Uri(site.BaseUrl, "/nettstedskart/"),
+                pathPrefix,
+                loggerFactory.CreateLogger<SiteMapUrlSource>());
+            parser = new StavangerPageParser();
+        }
+
+        var scraper = new HttpScraper(client, robots, parser, loggerFactory.CreateLogger<HttpScraper>(), delay);
         var store = new FileDocumentStore(dataDir);
         var service = new IngestService(source, scraper, store, loggerFactory.CreateLogger<IngestService>());
 
@@ -162,13 +183,13 @@ internal static class Program
     private static async Task RunIndexAsync(string[] args)
     {
         var settings = Settings.Load();
-        var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Path.Combine("data", "raw")));
+        var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Site(args).DataDir));
 
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.AddSimpleConsole(options => options.SingleLine = true);
         });
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, GetOption(args, "--schema", DbSchema), settings.EmbeddingDimensions);
+        using var index = OpenIndex(settings, args);
         var service = new IndexService(
             new FileDocumentStore(dataDir),
             MakeChunker(args),
@@ -184,13 +205,13 @@ internal static class Program
             + $"{report.Unchanged.Count} unchanged, {report.Deleted.Count} removed.");
     }
 
-    private static async Task RunSearchAsync(string question, int topK, string mode, string schema)
+    private static async Task RunSearchAsync(string question, string[] args)
     {
         var settings = Settings.Load();
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, schema, settings.EmbeddingDimensions);
-        var retriever = MakeRetriever(settings, mode, index);
+        using var index = OpenIndex(settings, args);
+        var retriever = MakeRetriever(settings, GetOption(args, "--mode", Site(args).DefaultMode), index);
 
-        var hits = await retriever.RetrieveAsync(question, topK).ConfigureAwait(false);
+        var hits = await retriever.RetrieveAsync(question, GetIntOption(args, "--top-k", 5)).ConfigureAwait(false);
         for (var i = 0; i < hits.Count; i++)
         {
             var firstLine = hits[i].Chunk.Text.Split('\n')[0];
@@ -202,20 +223,19 @@ internal static class Program
     private static async Task RunAskAsync(string question, string[] args)
     {
         var settings = Settings.Load();
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, GetOption(args, "--schema", DbSchema), settings.EmbeddingDimensions);
+        using var index = OpenIndex(settings, args);
         var service = MakeChatService(settings, args, index);
 
-        PrintAnswer(await service.AskAsync(question).ConfigureAwait(false));
+        PrintAnswer(await service.AskAsync(question).ConfigureAwait(false), Site(args));
     }
 
     private static async Task RunChatAsync(string[] args)
     {
         var settings = Settings.Load();
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, GetOption(args, "--schema", DbSchema), settings.EmbeddingDimensions);
+        using var index = OpenIndex(settings, args);
         var service = MakeChatService(settings, args, index);
 
-        Console.WriteLine("Spør om Stavanger kommune / Ask about Stavanger kommune.");
-        Console.WriteLine("Tom linje avslutter / An empty line quits.");
+        Console.WriteLine(Site(args).Greeting);
         while (true)
         {
             Console.Write("\n> ");
@@ -225,16 +245,16 @@ internal static class Program
                 return;
             }
 
-            PrintAnswer(await service.AskAsync(question).ConfigureAwait(false));
+            PrintAnswer(await service.AskAsync(question).ConfigureAwait(false), Site(args));
         }
     }
 
     private static async Task RunEvalRetrievalAsync(string[] args)
     {
         var settings = Settings.Load();
-        var schema = GetOption(args, "--schema", DbSchema);
+        var schema = Schema(args);
         var questions = QuestionSet.Load(QuestionsPath(args));
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, schema, settings.EmbeddingDimensions);
+        using var index = OpenIndex(settings, args);
 
         Console.WriteLine($"Retrieval on {schema}: {questions.Count(q => q.Answerable)} answerable questions");
         Console.WriteLine($"{"mode",-8} {"hit@1",6} {"hit@3",6} {"hit@5",6} {"hit@10",6} {"MRR",6}  not found");
@@ -252,12 +272,12 @@ internal static class Program
     private static async Task RunEvalAnswersAsync(string[] args)
     {
         var settings = Settings.Load();
-        var schema = GetOption(args, "--schema", DbSchema);
-        var mode = GetOption(args, "--mode", "hybrid");
+        var schema = Schema(args);
+        var mode = GetOption(args, "--mode", Site(args).DefaultMode);
         var topK = GetIntOption(args, "--top-k", 5);
-        using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, schema, settings.EmbeddingDimensions);
+        using var index = OpenIndex(settings, args);
         var client = AzureOpenAIClientFactory.Create(settings.AzureOpenAIEndpoint, settings.AzureOpenAIApiKey);
-        var judge = new AzureOpenAIJudge(client, settings.ChatDeployment);
+        var judge = new AzureOpenAIJudge(client, settings.ChatDeployment, Site(args));
 
         var results = await EvaluationService.EvaluateAnswersAsync(
             MakeChatService(settings, args, index), judge, QuestionSet.Load(QuestionsPath(args))).ConfigureAwait(false);
@@ -295,7 +315,7 @@ internal static class Program
 
     private static string QuestionsPath(string[] args)
     {
-        return GetOption(args, "--questions", Path.Combine(RepoRoot(), "eval", "questions.json"));
+        return GetOption(args, "--questions", Path.Combine(RepoRoot(), Site(args).QuestionsFile));
     }
 
     /// <summary>The folder above dotnet/: found by walking up from the current folder.</summary>
@@ -313,12 +333,12 @@ internal static class Program
     private static ChatService MakeChatService(Settings settings, string[] args, PgVectorChunkIndex index)
     {
         var client = AzureOpenAIClientFactory.Create(settings.AzureOpenAIEndpoint, settings.AzureOpenAIApiKey);
-        var generator = new AzureOpenAIAnswerGenerator(client, settings.ChatDeployment);
-        var retriever = MakeRetriever(settings, GetOption(args, "--mode", "hybrid"), index);
-        return new ChatService(retriever, generator, GetIntOption(args, "--top-k", 5));
+        var generator = new AzureOpenAIAnswerGenerator(client, settings.ChatDeployment, Site(args));
+        var retriever = MakeRetriever(settings, GetOption(args, "--mode", Site(args).DefaultMode), index);
+        return new ChatService(retriever, generator, GetIntOption(args, "--top-k", 5), Site(args).NoContextAnswer);
     }
 
-    private static void PrintAnswer(Answer answer)
+    private static void PrintAnswer(Answer answer, SiteProfile site)
     {
         Console.WriteLine($"\n{answer.Text}");
         if (answer.Sources.Count == 0)
@@ -326,7 +346,7 @@ internal static class Program
             return;
         }
 
-        Console.WriteLine("\nKilder:"); // "Sources"
+        Console.WriteLine($"\n{site.SourcesLabel}");
         for (var i = 0; i < answer.Sources.Count; i++)
         {
             var source = answer.Sources[i];
@@ -362,7 +382,7 @@ internal static class Program
     private static async Task RunChunkAsync(string[] args)
     {
         var chunker = MakeChunker(args);
-        var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Path.Combine("data", "raw")));
+        var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Site(args).DataDir));
         var show = GetOption(args, "--show", "");
 
         var stored = await new FileDocumentStore(dataDir).AllAsync().ToListAsync().ConfigureAwait(false);
@@ -397,6 +417,24 @@ internal static class Program
                 Console.WriteLine($"\n--- #{c.Position} [{c.Text.Length} chars] heading={c.Heading ?? "None"}\n{c.Text}");
             }
         }
+    }
+
+    /// <summary>The website picked with --site (default: stavanger).</summary>
+    private static SiteProfile Site(string[] args)
+    {
+        return SiteProfile.Get(GetOption(args, "--site", SiteProfile.Stavanger.Key));
+    }
+
+    /// <summary>--schema, or the site's own schema (Python uses "python" in the same database).</summary>
+    private static string Schema(string[] args)
+    {
+        return GetOption(args, "--schema", Site(args).DefaultSchema);
+    }
+
+    private static PgVectorChunkIndex OpenIndex(Settings settings, string[] args)
+    {
+        return new PgVectorChunkIndex(
+            settings.PostgresConnectionString, Schema(args), settings.EmbeddingDimensions, Site(args).TextSearchConfig);
     }
 
     private static int GetIntOption(string[] args, string name, int fallback)

@@ -41,6 +41,18 @@ knows nothing about the chatbot, and the chatbot knows nothing about scraping.
 concrete adapters, plugs them into a use case, and runs it. That's the only place that knows
 "this run uses Postgres and Azure"; everything else works through interfaces.
 
+### Other websites: `--site`
+
+Everything below describes the default site, Stavanger. With `--site satisfactory`, the same
+commands work on the Satisfactory Wiki, and only the edges change:
+
+- **Ingestion:** pages come from `MediaWikiAllPagesUrlSource` (the wiki's `Special:AllPages`
+  list) instead of `SiteMapUrlSource`. `HttpScraper` gets a `MediaWikiPageParser` instead of a
+  `StavangerPageParser`, through the `IPageParser` seam.
+- **Everything else:** `SiteProfile` supplies the site-specific values. These are the prompt
+  wording, English instead of Norwegian keyword search, the data folder, the database schema
+  and the eval questions.
+
 ## 1. Ingestion: `ingest`
 
 **Purpose:** copy web pages to disk as clean markdown, so nothing later has to touch the website.

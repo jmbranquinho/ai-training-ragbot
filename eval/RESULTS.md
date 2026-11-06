@@ -132,3 +132,31 @@ No code change was needed: these were already the defaults.
   measure the effect with this evaluation.
 - **Weighted fusion:** give keyword results less weight than vector results in RRF, so
   non-matching keyword noise (e.g. English questions) can't push irrelevant chunks up.
+
+## Second site: the Satisfactory Wiki (.NET, `--site satisfactory`)
+
+772 English articles (775 stored, 3 duplicates) → 7,677 chunks with `headings:1500`, in schema
+`dotnet_satisfactory`. Test set: [questions-satisfactory.json](questions-satisfactory.json),
+18 questions: 13 English and 2 Norwegian answerable, and 3 off-topic (run on 2026-11-06).
+
+| Retrieval | hit@1 | hit@3 | hit@5 | hit@10 | MRR |
+|---|---|---|---|---|---|
+| vector | **100%** | 100% | 100% | 100% | **1.000** |
+| keyword | 40% | 60% | 67% | 87% | 0.547 |
+| hybrid | 67% | 87% | 100% | 100% | 0.786 |
+
+| Answers (top_k=5) | correct | partial | incorrect | cited a correct page | off-topic refused |
+|---|---|---|---|---|---|
+| hybrid | 11/15 | 3/15 | 1/15 | 13/15 | 3/3 |
+| **vector** | **13/15** | 2/15 | **0/15** | **15/15** | 3/3 |
+
+**The opposite of Stavanger: keyword search hurts here.** A game wiki repeats the same names
+on many pages and sections. For "What does it cost to build the Space Elevator?", the words
+match the page's Trivia and History sections best. The facts are in the infobox, which says
+"Ingredients", not "cost". Hybrid then answered "the cost is not specified" (the one
+incorrect). Vector search ranks by meaning and found the infobox chunk first for every
+question. Both partial grades in vector mode are the judge marking down extra correct details.
+
+**Decision:** the default retrieval mode is now a per-site setting (`SiteProfile.DefaultMode`):
+`vector` for the wiki, `hybrid` for Stavanger. The best mode depends on the content, which is
+the reason to evaluate each site separately.

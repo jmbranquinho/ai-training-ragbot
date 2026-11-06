@@ -12,7 +12,8 @@ using RagBot.Core.Domain;
 
 namespace RagBot.Core.Chat;
 
-public sealed class ChatService(IRetriever retriever, IAnswerGenerator generator, int topK = 5)
+public sealed class ChatService(
+    IRetriever retriever, IAnswerGenerator generator, int topK = 5, string noContextAnswer = ChatService.NoContextAnswer)
 {
     public const string NoContextAnswer = "Jeg vet ikke. Jeg fant ingen relevant informasjon om dette på nettsidene.";
 
@@ -28,7 +29,7 @@ public sealed class ChatService(IRetriever retriever, IAnswerGenerator generator
         var context = await retriever.RetrieveAsync(question, topK, ct).ConfigureAwait(false);
         if (context.Count == 0)
         {
-            return new Answer(NoContextAnswer, []);
+            return new Answer(noContextAnswer, []);
         }
 
         return await generator.AnswerAsync(question, context, ct).ConfigureAwait(false);

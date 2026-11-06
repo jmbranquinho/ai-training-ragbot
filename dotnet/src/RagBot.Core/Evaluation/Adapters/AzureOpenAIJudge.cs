@@ -5,7 +5,7 @@ using OpenAI.Chat;
 
 namespace RagBot.Core.Evaluation.Adapters;
 
-public sealed class AzureOpenAIJudge(AzureOpenAIClient client, string deployment) : IAnswerJudge
+public sealed class AzureOpenAIJudge(AzureOpenAIClient client, string deployment, SiteProfile? site = null) : IAnswerJudge
 {
     private static readonly ChatCompletionOptions Options = new()
     {
@@ -17,7 +17,7 @@ public sealed class AzureOpenAIJudge(AzureOpenAIClient client, string deployment
 
     public async Task<Verdict> JudgeAsync(string question, string reference, string answer, CancellationToken ct = default)
     {
-        var messages = JudgePrompt.BuildMessages(question, reference, answer)
+        var messages = JudgePrompt.BuildMessages(question, reference, answer, site)
             .Select(m => m.Role == "system" ? (ChatMessage)new SystemChatMessage(m.Content) : new UserChatMessage(m.Content))
             .ToList();
 

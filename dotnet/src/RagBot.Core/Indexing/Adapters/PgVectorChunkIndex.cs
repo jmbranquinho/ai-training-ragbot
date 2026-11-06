@@ -2,7 +2,7 @@
 // Mirrors python/src/ragbot/indexing/adapters/pgvector_index.py; the table layout is identical:
 //   id, document_url, document_version, document_title, heading, position, text, metadata,
 //   embedding vector(N)  -- searched with cosine distance through an HNSW index
-//   tsv tsvector         -- generated Norwegian full-text column, for hybrid search in Step 6
+//   tsv tsvector         -- generated full-text column (Norwegian or English stemming), for hybrid search
 //
 // Vectors are sent as float4[] and cast to vector in SQL (@q::vector), so no extra pgvector
 // .NET package is needed.
@@ -20,18 +20,32 @@ public sealed partial class PgVectorChunkIndex : IChunkIndex, IDisposable
     private readonly NpgsqlDataSource _dataSource;
     private readonly string _schema;
     private readonly int _dimensions;
+    private readonly string _textSearchConfig;
     private bool _ready; // table is created/checked on first use, so ClearAsync can run first
 
-    public PgVectorChunkIndex(string connectionString, string schema, int dimensions)
+    /// <param name="connectionString">Npgsql connection string.</param>
+    /// <param name="schema">Schema holding the chunks table, e.g. "dotnet".</param>
+    /// <param name="dimensions">Embedding size.</param>
+    /// <param name="textSearchConfig">
+    /// PostgreSQL text search configuration for keyword search, e.g. "norwegian" or "english".
+    /// It is baked into the generated tsv column, so changing it needs --rebuild.
+    /// </param>
+    public PgVectorChunkIndex(string connectionString, string schema, int dimensions, string textSearchConfig = "norwegian")
     {
         if (!SafeIdentifier().IsMatch(schema))
         {
             throw new ArgumentException($"invalid schema name: {schema}", nameof(schema));
         }
 
+        if (!SafeIdentifier().IsMatch(textSearchConfig))
+        {
+            throw new ArgumentException($"invalid text search configuration: {textSearchConfig}", nameof(textSearchConfig));
+        }
+
         _dataSource = NpgsqlDataSource.Create(connectionString);
         _schema = schema;
         _dimensions = dimensions;
+        _textSearchConfig = textSearchConfig;
     }
 
     public void Dispose()
@@ -136,7 +150,7 @@ public sealed partial class PgVectorChunkIndex : IChunkIndex, IDisposable
     }
 
     /// <summary>
-    /// Norwegian full-text search (stemming + stopwords) on the generated tsv column.
+    /// Full-text search (stemming + stopwords in the configured language) on the generated tsv column.
     /// plainto_tsquery joins words with AND (&amp;), so a whole question would only match chunks
     /// containing every word. Swapping &amp; for OR (|) means "any word matches, more matches rank
     /// higher", which suits natural-language questions.
@@ -147,7 +161,7 @@ public sealed partial class PgVectorChunkIndex : IChunkIndex, IDisposable
         await using var command = _dataSource.CreateCommand(
             "SELECT id, document_url, document_title, text, position, heading, metadata::text,"
             + " ts_rank_cd(tsv, q.query)::float8 AS score"
-            + $" FROM {_schema}.chunks, (SELECT replace(plainto_tsquery('norwegian', @q)::text,"
+            + $" FROM {_schema}.chunks, (SELECT replace(plainto_tsquery('{_textSearchConfig}', @q)::text,"
             + " '&', '|')::tsquery AS query) AS q"
             + " WHERE tsv @@ q.query ORDER BY score DESC, id LIMIT @k");
         command.Parameters.AddWithValue("q", query);
@@ -196,7 +210,7 @@ public sealed partial class PgVectorChunkIndex : IChunkIndex, IDisposable
                 text             text NOT NULL,
                 metadata         jsonb NOT NULL DEFAULT '{"{}"}'::jsonb,
                 embedding        vector({_dimensions}) NOT NULL,
-                tsv              tsvector GENERATED ALWAYS AS (to_tsvector('norwegian', text)) STORED
+                tsv              tsvector GENERATED ALWAYS AS (to_tsvector('{_textSearchConfig}', text)) STORED
             );
             CREATE INDEX IF NOT EXISTS chunks_document_url ON {_schema}.chunks (document_url);
             CREATE INDEX IF NOT EXISTS chunks_embedding ON {_schema}.chunks
@@ -218,6 +232,23 @@ public sealed partial class PgVectorChunkIndex : IChunkIndex, IDisposable
                 throw new InvalidOperationException(
                     $"{_schema}.chunks stores {existing}-dimensional vectors, but EMBEDDING_DIMENSIONS is "
                     + $"{_dimensions}. Re-run indexing with --rebuild.");
+            }
+        }
+
+        // The language is part of the generated column; querying a Norwegian column with
+        // English stemming would silently miss most matches.
+        await using (var check = _dataSource.CreateCommand(
+            "SELECT pg_get_expr(d.adbin, d.adrelid) FROM pg_attrdef d"
+            + " JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum"
+            + " WHERE d.adrelid = @table::regclass AND a.attname = 'tsv'"))
+        {
+            check.Parameters.AddWithValue("table", $"{_schema}.chunks");
+            var expression = (string?)await check.ExecuteScalarAsync(ct).ConfigureAwait(false);
+            if (expression is not null && !expression.Contains($"'{_textSearchConfig}'", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"{_schema}.chunks was built for another search language ({expression}), not "
+                    + $"'{_textSearchConfig}'. Re-run indexing with --rebuild.");
             }
         }
 

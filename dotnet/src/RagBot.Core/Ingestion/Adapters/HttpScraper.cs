@@ -10,6 +10,7 @@ namespace RagBot.Core.Ingestion.Adapters;
 public sealed partial class HttpScraper(
     HttpClient client,
     RobotsPolicy robots,
+    IPageParser parser,
     ILogger<HttpScraper> logger,
     TimeSpan? delay = null,
     Func<TimeSpan, CancellationToken, Task>? sleep = null) : IScraper // sleep injectable for tests
@@ -65,7 +66,7 @@ public sealed partial class HttpScraper(
             var html = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             // Whole seconds: that's the precision the file store keeps.
             var fetchedAt = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-            return StavangerHtml.ParsePage(url, html, fetchedAt);
+            return parser.Parse(url, html, fetchedAt);
         }
         catch (HttpRequestException error)
         {

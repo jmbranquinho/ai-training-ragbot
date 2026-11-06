@@ -9,24 +9,34 @@ namespace RagBot.Core.Evaluation;
 
 public static class JudgePrompt
 {
-    public const string SystemPrompt = """
-        You grade answers from a chatbot for the website of Stavanger kommune.
-        Compare the ANSWER with the REFERENCE, which holds the key facts from the website.
-        The answer may be in a different language than the reference; that is fine.
+    public static string SystemPromptFor(SiteProfile site)
+    {
+        ArgumentNullException.ThrowIfNull(site);
 
-        Grades:
-        - correct: contains the key facts of the reference and nothing that contradicts it.
-        - partial: misses some key facts, but contradicts nothing.
-        - incorrect: contradicts the reference, misses the main point, or says it doesn't know.
-        Only judge whether the key facts of the reference are present and not contradicted. Do NOT lower the grade because the answer contains more details than the reference: extra details are expected, since the answer comes from the full web page.
+        // $$""" = interpolation with {{...}}, so the JSON braces below stay literal.
+        return $$"""
+            You grade answers from a chatbot for {{site.JudgeSubject}}.
+            Compare the ANSWER with the REFERENCE, which holds the key facts from the website.
+            The answer may be in a different language than the reference; that is fine.
 
-        Reply with JSON only: {"grade": "correct" | "partial" | "incorrect", "reason": "<one short sentence>"}
-        """;
+            Grades:
+            - correct: contains the key facts of the reference and nothing that contradicts it.
+            - partial: misses some key facts, but contradicts nothing.
+            - incorrect: contradicts the reference, misses the main point, or says it doesn't know.
+            Only judge whether the key facts of the reference are present and not contradicted. Do NOT lower the grade because the answer contains more details than the reference: extra details are expected, since the answer comes from the full web page.
 
-    public static IReadOnlyList<PromptMessage> BuildMessages(string question, string reference, string answer)
+            Reply with JSON only: {"grade": "correct" | "partial" | "incorrect", "reason": "<one short sentence>"}
+            """;
+    }
+
+    /// <param name="question">The evaluation question.</param>
+    /// <param name="reference">The reference answer from the question set.</param>
+    /// <param name="answer">The chatbot's answer.</param>
+    /// <param name="site">Defaults to Stavanger, the site the shared fixture pins.</param>
+    public static IReadOnlyList<PromptMessage> BuildMessages(string question, string reference, string answer, SiteProfile? site = null)
     {
         var user = $"QUESTION: {question}\n\nREFERENCE: {reference}\n\nANSWER: {answer}";
-        return [new PromptMessage("system", SystemPrompt), new PromptMessage("user", user)];
+        return [new PromptMessage("system", SystemPromptFor(site ?? SiteProfile.Stavanger)), new PromptMessage("user", user)];
     }
 
     public static Verdict ParseVerdict(string reply)

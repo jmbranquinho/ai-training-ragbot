@@ -8,7 +8,7 @@ using RagBot.Core.Domain;
 
 namespace RagBot.Core.Chat.Adapters;
 
-public sealed class AzureOpenAIAnswerGenerator(AzureOpenAIClient client, string deployment) : IAnswerGenerator
+public sealed class AzureOpenAIAnswerGenerator(AzureOpenAIClient client, string deployment, SiteProfile? site = null) : IAnswerGenerator
 {
     private static readonly ChatCompletionOptions Options = new()
     {
@@ -20,7 +20,7 @@ public sealed class AzureOpenAIAnswerGenerator(AzureOpenAIClient client, string 
 
     public async Task<Answer> AnswerAsync(string question, IReadOnlyList<ScoredChunk> context, CancellationToken ct = default)
     {
-        var messages = PromptBuilder.BuildMessages(question, context)
+        var messages = PromptBuilder.BuildMessages(question, context, site)
             .Select(m => m.Role == "system" ? (ChatMessage)new SystemChatMessage(m.Content) : new UserChatMessage(m.Content))
             .ToList();
 

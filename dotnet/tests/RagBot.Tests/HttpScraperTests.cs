@@ -72,7 +72,7 @@ public sealed class HttpScraperTests
             [pdf.ToString()] = pdfResponse,
         });
         var sleeps = new List<TimeSpan>();
-        var scraper = new HttpScraper(client, new RobotsPolicy(TestData.Read("robots.txt"), Ua),
+        var scraper = new HttpScraper(client, new RobotsPolicy(TestData.Read("robots.txt"), Ua), new StavangerPageParser(),
             NullLogger<HttpScraper>.Instance, TimeSpan.FromSeconds(0.5),
             (delay, _) => { sleeps.Add(delay); return Task.CompletedTask; });
 

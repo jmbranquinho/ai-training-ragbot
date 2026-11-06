@@ -13,6 +13,12 @@ internal static class TestData
         return File.ReadAllText(PathOf(name));
     }
 
+    /// <summary>A file from testdata/mediawiki/ (hand-written pages in satisfactory.wiki.gg's layout).</summary>
+    public static string ReadMediaWiki(string name)
+    {
+        return File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "testdata", "mediawiki", name));
+    }
+
     public static byte[] ReadBytes(string name)
     {
         return File.ReadAllBytes(PathOf(name));

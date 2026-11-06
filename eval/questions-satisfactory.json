@@ -1,0 +1,113 @@
+{
+  "description": "Evaluation set for RagBot on the Satisfactory Wiki (satisfactory.wiki.gg, --site satisfactory). Questions are phrased the way a player would ask. expected_urls: pages that contain the answer (any one counts as a hit). An empty list means the wiki does not answer it, so the correct response is 'I don't know'. reference: the key facts from the page (checked against the crawl of 2026-11-06), used by the answer judge.",
+  "questions": [
+    {
+      "id": "s01", "language": "en",
+      "question": "How much power does a Mk.1 Miner use?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Miner"],
+      "reference": "5 MW."
+    },
+    {
+      "id": "s02", "language": "en",
+      "question": "How many items per minute can a Mk.1 conveyor belt move?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Conveyor_Belts"],
+      "reference": "Up to 60 resources per minute."
+    },
+    {
+      "id": "s03", "language": "en",
+      "question": "How much water does a Water Extractor pump per minute?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Water_Extractor"],
+      "reference": "120 m³ of water per minute (at 100% clock speed)."
+    },
+    {
+      "id": "s04", "language": "en",
+      "question": "What materials do I need to build a Smelter?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Smelter"],
+      "reference": "5 Iron Rod and 8 Wire."
+    },
+    {
+      "id": "s05", "language": "en",
+      "question": "How much power does a Nuclear Power Plant generate?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Nuclear_Power_Plant"],
+      "reference": "2,500 MW."
+    },
+    {
+      "id": "s06", "language": "en",
+      "question": "How many Somersloops are there in the world?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Somersloop"],
+      "reference": "106 Somersloops (as of Patch 1.0)."
+    },
+    {
+      "id": "s07", "language": "en",
+      "question": "Where do I find Hard Drives, and how many are there?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Hard_Drive", "https://satisfactory.wiki.gg/wiki/Crash_Site"],
+      "reference": "In Crash Sites; there are 118 Crash Sites, each with one Hard Drive, so 118 Hard Drives."
+    },
+    {
+      "id": "s08", "language": "en",
+      "question": "What range can I set a building's clock speed to?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Clock_speed"],
+      "reference": "Any percentage between 1% and 250%."
+    },
+    {
+      "id": "s09", "language": "en",
+      "question": "What are Power Shards for, and how do I get them?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Power_Shard"],
+      "reference": "They are used for overclocking buildings. They come from hunting and processing Power Slugs; synthetic production becomes available in Tier 9."
+    },
+    {
+      "id": "s10", "language": "en",
+      "question": "What does it cost to build the Space Elevator?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Space_Elevator"],
+      "reference": "500 Concrete, 250 Iron Plate, 400 Iron Rod and 1,500 Wire."
+    },
+    {
+      "id": "s11", "language": "en",
+      "question": "What do I need to craft an AI Limiter?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/AI_Limiter"],
+      "reference": "5 Copper Sheet and 20 Quickwire, made in an Assembler (12 seconds per cycle)."
+    },
+    {
+      "id": "s12", "language": "en",
+      "question": "How much power does a coal generator produce?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Coal-Powered_Generator"],
+      "reference": "75 MW."
+    },
+    {
+      "id": "s13", "language": "en",
+      "question": "Which equipment slot does the Jetpack go in?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Jetpack"],
+      "reference": "The Back slot."
+    },
+    {
+      "id": "s14", "language": "no",
+      "question": "Hvor mye strøm bruker en Smelter?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Smelter"],
+      "reference": "4 MW."
+    },
+    {
+      "id": "s15", "language": "no",
+      "question": "Hvor mange Power Slugs finnes det i spillet?",
+      "expected_urls": ["https://satisfactory.wiki.gg/wiki/Power_Slug", "https://satisfactory.wiki.gg/wiki/Power_Shard"],
+      "reference": "1242: 596 blue, 389 yellow and 257 purple."
+    },
+    {
+      "id": "s16", "language": "en",
+      "question": "What is the capital of France?",
+      "expected_urls": [],
+      "reference": "Off-topic: the bot should say it doesn't know."
+    },
+    {
+      "id": "s17", "language": "en",
+      "question": "Who won the 2022 football World Cup?",
+      "expected_urls": [],
+      "reference": "Off-topic: the bot should say it doesn't know."
+    },
+    {
+      "id": "s18", "language": "no",
+      "question": "Hvem er ordfører i Stavanger?",
+      "expected_urls": [],
+      "reference": "Off-topic for this wiki: the bot should say it doesn't know."
+    }
+  ]
+}

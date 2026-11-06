@@ -162,6 +162,34 @@ A full first crawl takes about 70 minutes at the polite default of 1 request per
 (`--delay`). Every page is saved and indexed as it goes, so stopping and re-running with
 `--only-new` loses nothing. Without `--only-new`, a run re-checks every page for changes.
 
+### Another site: the Satisfactory Wiki (.NET only)
+
+Every .NET command takes `--site`: `stavanger` (the default) or `satisfactory`, an English
+MediaWiki about the game Satisfactory ([satisfactory.wiki.gg](https://satisfactory.wiki.gg/),
+about 775 articles). Only the edges change; the pipeline in between is the same:
+
+| | `stavanger` | `satisfactory` |
+|---|---|---|
+| Finding pages | HTML site map `/nettstedskart/` (`SiteMapUrlSource`) | `Special:AllPages`, skipping translations like `/zh` (`MediaWikiAllPagesUrlSource`) |
+| Reading HTML | `StavangerHtml` | `MediaWikiHtml` (infobox → lists, recipe tables, tab labels) |
+| Keyword search | Postgres `norwegian` | Postgres `english` |
+| Default `--mode` | `hybrid` | `vector` (keyword search hurts here, see eval/RESULTS.md) |
+| Stored pages | `dotnet/data/raw/` | `dotnet/data/satisfactory/` |
+| Index schema | `dotnet` | `dotnet_satisfactory` |
+| Eval questions | `eval/questions.json` | `eval/questions-satisfactory.json` |
+
+The prompt wording and the other site-specific settings live in `SiteProfile`. The wiki's
+robots.txt disallows `api.php`, so RagBot reads the normal `/wiki/` pages like any visitor.
+That robots.txt also says `ai-train=no` (no model training; RagBot trains nothing) and
+`use=reference` (answers point back to the pages: RagBot cites them). Wiki text is licensed
+under Creative Commons, so keep the source links when sharing answers.
+
+```bash
+cd dotnet
+dotnet run --project src/RagBot.Cli -- update --site satisfactory --max-pages 0   # about 20 minutes
+dotnet run --project src/RagBot.Cli -- chat --site satisfactory
+```
+
 ### Chunking
 
 Two strategies sit behind the `Chunker` interface (`indexing/chunkers/`):
