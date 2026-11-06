@@ -117,6 +117,10 @@ dotnet format                                 # format
 
 ## Architecture
 
+A step-by-step walkthrough of every command (what ingestion, indexing, the chatbot and
+evaluation do, and which classes run in which order) is in
+**[docs/how-it-works-dotnet.md](docs/how-it-works-dotnet.md)**.
+
 The code is organized **by feature**, and each feature separates its
 **ports** (interfaces: the "what") from its **adapters** (implementations: the "how").
 
