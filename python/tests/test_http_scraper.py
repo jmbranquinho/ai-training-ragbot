@@ -35,17 +35,17 @@ def test_missing_robots_txt_allows_everything() -> None:
     assert robots.is_allowed(f"{BASE}/finn/")
 
 
-def test_site_map_source_respects_robots_and_max_pages() -> None:
-    site_map = """<a href="/renovasjon-og-miljo/a/">a</a>
+def test_site_map_source_respects_robots_and_skips_the_site_map_itself() -> None:
+    site_map = """<a href="/nettstedskart/">Nettstedskart</a>
+                   <a href="/renovasjon-og-miljo/a/">a</a>
                    <a href="/renovasjon-og-miljo/b/">b</a>
-                   <a href="/renovasjon-og-miljo/c/">c</a>
-                   <a href="/renovasjon-og-miljo/d/">d</a>"""
+                   <a href="/renovasjon-og-miljo/c/">c</a>"""
     client = make_client({f"{BASE}/nettstedskart/": html(site_map)})
     robots = RobotsPolicy("User-agent: *\nDisallow: /renovasjon-og-miljo/b/", UA)
 
-    source = SiteMapUrlSource(client, robots, f"{BASE}/nettstedskart/", "/renovasjon-og-miljo/", 2)
+    source = SiteMapUrlSource(client, robots, f"{BASE}/nettstedskart/", "/")  # "/" = whole site
 
-    # b is disallowed, so the first 2 allowed pages are a and c
+    # b is disallowed; the site map page is only links, so it is left out
     assert source.discover() == [f"{BASE}/renovasjon-og-miljo/a/", f"{BASE}/renovasjon-og-miljo/c/"]
 
 

@@ -42,18 +42,18 @@ MODES = ["vector", "keyword", "hybrid"]
 QUESTIONS = Path(__file__).resolve().parents[3] / "eval" / "questions.json"
 
 
-def ingest(section: str, max_pages: int, delay: float, data_dir: Path) -> None:
+def ingest(section: str, max_pages: int, delay: float, data_dir: Path, only_new: bool) -> None:
+    path_prefix = "/" if section == "all" else f"/{section.strip('/')}/"
+    limit = max_pages if max_pages > 0 else None  # 0 = no limit
     with httpx.Client(  # `with` ≈ `using`: closes the client at the end
         headers={"User-Agent": USER_AGENT}, timeout=30, follow_redirects=True
     ) as client:
         robots = RobotsPolicy.load(client, BASE_URL, USER_AGENT)
-        source = SiteMapUrlSource(
-            client, robots, f"{BASE_URL}/nettstedskart/", f"/{section}/", max_pages
-        )
+        source = SiteMapUrlSource(client, robots, f"{BASE_URL}/nettstedskart/", path_prefix)
         scraper = HttpScraper(client, robots, delay_seconds=delay)
         store = FileDocumentStore(data_dir)
 
-        report = IngestService(source, scraper, store).run()
+        report = IngestService(source, scraper, store).run(only_new=only_new, max_pages=limit)
 
     print(
         f"\n{len(report.new)} new, {len(report.updated)} updated, "
@@ -198,7 +198,8 @@ def ask(question: str, mode: str, top_k: int, schema: str) -> None:
 
 def chat(mode: str, top_k: int, schema: str) -> None:
     service = make_chat_service(Settings.load(), mode, top_k, schema)
-    print("Spør om renovasjon og miljø i Stavanger kommune. Tom linje avslutter.")
+    print("Spør om Stavanger kommune / Ask about Stavanger kommune.")
+    print("Tom linje avslutter / An empty line quits.")
     while question := input("\n> ").strip():  # loop until an empty line
         print_answer(service.ask(question))
 
@@ -206,6 +207,17 @@ def chat(mode: str, top_k: int, schema: str) -> None:
 def make_embedder(settings: Settings) -> AzureOpenAIEmbedder:
     client = create_client(settings.azure_openai_endpoint, settings.azure_openai_api_key)
     return AzureOpenAIEmbedder(client, settings.embedding_deployment, settings.embedding_dimensions)
+
+
+def add_ingest_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--section", default="renovasjon-og-miljo", help='URL path section, or "all" for the site'
+    )
+    parser.add_argument("--max-pages", type=int, default=10, help="0 = no limit")
+    parser.add_argument("--delay", type=float, default=1.0, help="seconds between requests")
+    parser.add_argument(
+        "--only-new", action="store_true", help="skip pages already stored (resume a crawl)"
+    )
 
 
 def add_chunker_args(parser: argparse.ArgumentParser) -> None:
@@ -227,10 +239,13 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     ingest_cmd = sub.add_parser("ingest", help="Scrape the website and store raw pages")
-    ingest_cmd.add_argument("--section", default="renovasjon-og-miljo", help="URL path section")
-    ingest_cmd.add_argument("--max-pages", type=int, default=10)
-    ingest_cmd.add_argument("--delay", type=float, default=1.0, help="seconds between requests")
+    add_ingest_args(ingest_cmd)
     ingest_cmd.add_argument("--data-dir", type=Path, default=Path("data/raw"))
+
+    update_cmd = sub.add_parser("update", help="ingest + index in one go")
+    add_ingest_args(update_cmd)
+    add_chunker_args(update_cmd)  # includes --data-dir
+    update_cmd.add_argument("--rebuild", action="store_true", help="drop the index first")
 
     chunk_cmd = sub.add_parser("chunk", help="Chunk stored pages and print statistics")
     add_chunker_args(chunk_cmd)
@@ -261,7 +276,7 @@ def main() -> None:
     eval_cmd.add_argument("--top-k", type=int, default=5, help="answers: chunks for the model")
     eval_cmd.add_argument("--questions", type=Path, default=QUESTIONS)
 
-    for cmd in (index_cmd, search_cmd, ask_cmd, chat_cmd, eval_cmd):
+    for cmd in (index_cmd, update_cmd, search_cmd, ask_cmd, chat_cmd, eval_cmd):
         cmd.add_argument("--schema", default=DB_SCHEMA, help="database schema (index variant)")
 
     args = parser.parse_args()
@@ -271,7 +286,10 @@ def main() -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     if args.command == "ingest":
-        ingest(args.section, args.max_pages, args.delay, args.data_dir)
+        ingest(args.section, args.max_pages, args.delay, args.data_dir, args.only_new)
+    elif args.command == "update":
+        ingest(args.section, args.max_pages, args.delay, args.data_dir, args.only_new)
+        index(make_chunker(args), args.data_dir, args.rebuild, args.schema)
     elif args.command == "chunk":
         chunk(make_chunker(args), args.data_dir, args.show)
     elif args.command == "index":

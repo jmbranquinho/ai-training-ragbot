@@ -43,6 +43,34 @@ public sealed class IngestServiceTests
         Assert.Equal("B, edited", (await store.GetAsync(B))!.Content);
     }
 
+    [Fact]
+    public async Task Only_new_skips_pages_that_are_already_stored()
+    {
+        var store = new InMemoryDocumentStore();
+        var scraper = new FakeScraper(FirstRun) { Pages = { [A] = "A" } };
+        await new IngestService(new FakeUrlSource([A]), scraper, store, NullLogger<IngestService>.Instance).RunAsync();
+
+        scraper.Pages[A] = "A, edited"; // A changed, B is new
+        scraper.Pages[B] = "B";
+        var report = await CreateService(scraper, store).RunAsync(onlyNew: true);
+
+        Assert.Equal([B], report.New);
+        Assert.Empty(report.Updated); // A was not fetched at all, so its change is not seen
+        Assert.Equal("A", (await store.GetAsync(A))!.Content);
+    }
+
+    [Fact]
+    public async Task Max_pages_counts_only_pages_that_are_not_stored_yet()
+    {
+        var store = new InMemoryDocumentStore();
+        var scraper = new FakeScraper(FirstRun) { Pages = { [A] = "A", [B] = "B" } };
+        await CreateService(scraper, store).RunAsync(maxPages: 1); // stores A
+
+        var report = await CreateService(scraper, store).RunAsync(onlyNew: true, maxPages: 1);
+
+        Assert.Equal([B], report.New); // the next page not stored yet, not A again
+    }
+
     private static IngestService CreateService(FakeScraper scraper, InMemoryDocumentStore store)
     {
         return new IngestService(

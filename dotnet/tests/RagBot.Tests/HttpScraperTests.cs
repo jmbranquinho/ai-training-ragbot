@@ -36,22 +36,22 @@ public sealed class HttpScraperTests
     }
 
     [Fact]
-    public async Task SiteMapUrlSource_respects_robots_and_max_pages()
+    public async Task SiteMapUrlSource_respects_robots_and_skips_the_site_map_itself()
     {
         const string siteMap = """
+            <a href="/nettstedskart/">Nettstedskart</a>
             <a href="/renovasjon-og-miljo/a/">a</a>
             <a href="/renovasjon-og-miljo/b/">b</a>
             <a href="/renovasjon-og-miljo/c/">c</a>
-            <a href="/renovasjon-og-miljo/d/">d</a>
             """;
         using var client = MakeClient(new() { [$"{Base}/nettstedskart/"] = FakeHttpHandler.Html(siteMap) });
         var robots = new RobotsPolicy("User-agent: *\nDisallow: /renovasjon-og-miljo/b/", Ua);
         var source = new SiteMapUrlSource(client, robots, new Uri($"{Base}/nettstedskart/"),
-            "/renovasjon-og-miljo/", 2, NullLogger<SiteMapUrlSource>.Instance);
+            "/", NullLogger<SiteMapUrlSource>.Instance); // "/" = whole site
 
         var urls = await source.DiscoverAsync();
 
-        // b is disallowed, so the first 2 allowed pages are a and c
+        // b is disallowed; the site map page is only links, so it is left out
         Assert.Equal(
             [new Uri($"{Base}/renovasjon-og-miljo/a/"), new Uri($"{Base}/renovasjon-og-miljo/c/")],
             urls);

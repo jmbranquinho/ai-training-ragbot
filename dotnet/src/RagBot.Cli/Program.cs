@@ -32,10 +32,14 @@ internal static class Program
 
         Commands:
           ingest   Scrape the website and store raw pages
-                     --section <name>    URL path section (default: renovasjon-og-miljo)
-                     --max-pages <n>     default: 10
+                     --section <name>    URL path section, or "all" for the whole site
+                                         (default: renovasjon-og-miljo)
+                     --max-pages <n>     0 = no limit (default: 10)
                      --delay <seconds>   between requests (default: 1.0)
+                     --only-new          skip pages already stored (resume an interrupted crawl)
                      --data-dir <path>   where pages are stored (default: data/raw)
+          update   ingest + index in one go; takes the options of both
+                     e.g. update --section all --max-pages 0 --only-new
           chunk    Chunk stored pages and print statistics
                      --strategy <name>   headings | window (default: headings)
                      --max-chars <n>     headings: max body size (default: 1500)
@@ -87,6 +91,10 @@ internal static class Program
             case "ingest":
                 await RunIngestAsync(args).ConfigureAwait(false);
                 return 0;
+            case "update":
+                await RunIngestAsync(args).ConfigureAwait(false);
+                await RunIndexAsync(args).ConfigureAwait(false);
+                return 0;
             case "chunk":
                 await RunChunkAsync(args).ConfigureAwait(false);
                 return 0;
@@ -117,7 +125,10 @@ internal static class Program
     private static async Task RunIngestAsync(string[] args)
     {
         var section = GetOption(args, "--section", "renovasjon-og-miljo");
-        var maxPages = int.Parse(GetOption(args, "--max-pages", "10"), CultureInfo.InvariantCulture);
+        var pathPrefix = section == "all" ? "/" : $"/{section.Trim('/')}/";
+        var maxPagesOption = GetIntOption(args, "--max-pages", 10);
+        int? maxPages = maxPagesOption > 0 ? maxPagesOption : null; // 0 = no limit
+
         var delaySeconds = double.Parse(GetOption(args, "--delay", "1.0"), CultureInfo.InvariantCulture);
         var dataDir = Path.GetFullPath(GetOption(args, "--data-dir", Path.Combine("data", "raw")));
 
@@ -133,15 +144,14 @@ internal static class Program
             client,
             robots,
             new Uri($"{BaseUrl}/nettstedskart/"),
-            $"/{section}/",
-            maxPages,
+            pathPrefix,
             loggerFactory.CreateLogger<SiteMapUrlSource>());
         var scraper = new HttpScraper(
             client, robots, loggerFactory.CreateLogger<HttpScraper>(), TimeSpan.FromSeconds(delaySeconds));
         var store = new FileDocumentStore(dataDir);
         var service = new IngestService(source, scraper, store, loggerFactory.CreateLogger<IngestService>());
 
-        var report = await service.RunAsync().ConfigureAwait(false);
+        var report = await service.RunAsync(onlyNew: args.Contains("--only-new"), maxPages: maxPages).ConfigureAwait(false);
 
         loggerFactory.Dispose(); // flush the console logger before printing the summary
         Console.WriteLine(
@@ -204,7 +214,8 @@ internal static class Program
         using var index = new PgVectorChunkIndex(settings.PostgresConnectionString, GetOption(args, "--schema", DbSchema), settings.EmbeddingDimensions);
         var service = MakeChatService(settings, args, index);
 
-        Console.WriteLine("Spør om renovasjon og miljø i Stavanger kommune. Tom linje avslutter.");
+        Console.WriteLine("Spør om Stavanger kommune / Ask about Stavanger kommune.");
+        Console.WriteLine("Tom linje avslutter / An empty line quits.");
         while (true)
         {
             Console.Write("\n> ");

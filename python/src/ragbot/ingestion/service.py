@@ -25,10 +25,22 @@ class IngestService:
         self._scraper = scraper
         self._store = store
 
-    def run(self) -> IngestReport:
+    def run(self, only_new: bool = False, max_pages: int | None = None) -> IngestReport:
+        """
+        only_new:  skip pages that are already stored. Lets an interrupted full-site crawl
+                   resume where it stopped, but stored pages are then not checked for changes.
+        max_pages: fetch at most this many pages (None = all). Applied after only_new, so
+                   "--only-new --max-pages 100" means "the next 100 pages not stored yet".
+        """
         report = IngestReport()
+        urls = self._source.discover()
+        if only_new:
+            urls = [url for url in urls if self._store.get(url) is None]
+            logger.info("%d pages not stored yet", len(urls))
+        if max_pages is not None:
+            urls = urls[:max_pages]  # slice: first max_pages items (≈ .Take(n))
 
-        for document in self._scraper.fetch(self._source.discover()):
+        for document in self._scraper.fetch(urls):
             existing = self._store.get(document.url)
 
             if existing is None:

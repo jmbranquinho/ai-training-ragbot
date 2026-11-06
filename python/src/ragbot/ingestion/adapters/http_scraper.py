@@ -18,26 +18,21 @@ class SiteMapUrlSource:
     """Discovers pages from the site's HTML site map (/nettstedskart/)."""
 
     def __init__(
-        self,
-        client: httpx.Client,
-        robots: RobotsPolicy,
-        site_map_url: str,
-        path_prefix: str,
-        max_pages: int,
+        self, client: httpx.Client, robots: RobotsPolicy, site_map_url: str, path_prefix: str
     ) -> None:
         self._client = client
         self._robots = robots
         self._site_map_url = site_map_url
         self._path_prefix = path_prefix
-        self._max_pages = max_pages
 
     def discover(self) -> list[str]:
         response = self._client.get(self._site_map_url)
         response.raise_for_status()  # ≈ EnsureSuccessStatusCode()
         links = stavanger_html.extract_links(response.text, self._site_map_url, self._path_prefix)
-        allowed = [url for url in links if self._robots.is_allowed(url)]
+        # The site map links to itself; it's only a list of links, not content worth indexing
+        allowed = [u for u in links if u != self._site_map_url and self._robots.is_allowed(u)]
         logger.info("Discovered %d pages (%d allowed by robots.txt)", len(links), len(allowed))
-        return allowed[: self._max_pages]  # slice: first max_pages items (≈ .Take(n))
+        return allowed
 
 
 class HttpScraper:

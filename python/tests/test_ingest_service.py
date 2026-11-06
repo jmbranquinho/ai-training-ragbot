@@ -63,3 +63,28 @@ def test_second_run_detects_updated_and_unchanged_pages() -> None:
     assert a is not None and b is not None  # narrows `Document | None` to `Document`
     assert a.fetched_at == FIRST_RUN  # unchanged page was not rewritten
     assert b.content == "B, edited"
+
+
+def test_only_new_skips_pages_that_are_already_stored() -> None:
+    store = InMemoryDocumentStore()
+    scraper = FakeScraper({"a": "A"}, FIRST_RUN)
+    IngestService(FakeUrlSource(["a"]), scraper, store).run()
+
+    scraper.pages.update({"a": "A, edited", "b": "B"})  # "a" changed, "b" is new
+    report = IngestService(FakeUrlSource(["a", "b"]), scraper, store).run(only_new=True)
+
+    assert report.new == ["b"]
+    assert report.updated == []  # "a" was not fetched at all, so its change is not seen
+    stored_a = store.get("a")
+    assert stored_a is not None and stored_a.content == "A"
+
+
+def test_max_pages_counts_only_pages_that_are_not_stored_yet() -> None:
+    store = InMemoryDocumentStore()
+    scraper = FakeScraper({"a": "A", "b": "B", "c": "C"}, FIRST_RUN)
+    source = FakeUrlSource(["a", "b", "c"])
+    IngestService(source, scraper, store).run(max_pages=1)  # stores "a"
+
+    report = IngestService(source, scraper, store).run(only_new=True, max_pages=1)
+
+    assert report.new == ["b"]  # the next page not stored yet, not "a" again

@@ -110,6 +110,7 @@ dotnet run --project src/RagBot.Cli -- index --data-dir ../python/data/raw   # s
 dotnet run --project src/RagBot.Cli -- search "Hvor leverer jeg maling?"
 dotnet run --project src/RagBot.Cli -- ask "Hvor leverer jeg maling?"
 dotnet run --project src/RagBot.Cli -- chat
+dotnet run --project src/RagBot.Cli -- update --section all --max-pages 0   # whole site: scrape + index
 dotnet test                                   # tests
 dotnet format                                 # format
 ```
@@ -143,6 +144,20 @@ Re-running `ingest` still downloads every page (the site sends no ETag/Last-Modi
 headers), but it compares content hashes and only rewrites pages that changed. It reports
 each page as **new**, **updated** or **unchanged**.
 
+### The whole site in one go
+
+`update` runs `ingest` and then `index`, and takes the options of both:
+
+| Option | Meaning |
+|---|---|
+| `--section all` | every page in the site map (about 4,200), instead of one section |
+| `--max-pages 0` | no limit |
+| `--only-new` | skip pages already stored, so an interrupted crawl resumes where it stopped (stored pages are then not checked for changes) |
+
+A full first crawl takes about 70 minutes at the polite default of 1 request per second
+(`--delay`). Every page is saved and indexed as it goes, so stopping and re-running with
+`--only-new` loses nothing. Without `--only-new`, a run re-checks every page for changes.
+
 ### Chunking
 
 Two strategies sit behind the `Chunker` interface (`indexing/chunkers/`):
@@ -172,6 +187,14 @@ Three retrievers sit behind the `Retriever` interface (`chat/retrieval`), each w
 
 Hybrid scores are RRF scores (around 0.01–0.03), not similarities, so they can't be compared
 with the other modes or used as a relevance threshold.
+
+### Evaluation
+
+`eval retrieval` measures hit@k and MRR per search mode; `eval answers` runs the whole chatbot
+and lets an LLM judge grade each answer against a reference. Both read
+[eval/questions.json](eval/questions.json) (26 questions, incl. English and unanswerable ones)
+and take `--schema` to compare index variants. Results and the decisions they led to:
+**[eval/RESULTS.md](eval/RESULTS.md)**.
 
 ### Answers
 

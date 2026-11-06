@@ -19,8 +19,8 @@ Rules:
 (an English question gets an English answer).
 - Be concise: a few sentences or a short list.
 - Every statement must come from the sources. Cite them with their numbers, like [1] or [2][3].
-- If the sources do not contain the answer, say that you don't know (in Norwegian: "Jeg vet \
-ikke.") and suggest contacting Stavanger kommune. Do not guess and do not use outside knowledge.
+- If the sources do not contain the answer, say that you don't know, in the language of the \
+question, and suggest contacting Stavanger kommune. Do not guess and do not use outside knowledge.
 - Reply with JSON only, in this format:
   {"language": "<the language the question is written in>", \
 "answer": "<your answer, written in that language, with [n] citations>", \
@@ -29,6 +29,8 @@ ikke.") and suggest contacting Stavanger kommune. Do not guess and do not use ou
 # Why the "language" field: a rule like "answer in the question's language" alone was not
 # enough; with Norwegian sources the model often answered English questions in Norwegian.
 # Making it name the language first, before writing the answer, fixed that in testing.
+# The "don't know" rule deliberately has no Norwegian example ("Jeg vet ikke"): an earlier
+# version had one, and it made refusals to English questions come out in Norwegian.
 
 
 def build_messages(question: str, context: Sequence[ScoredChunk]) -> list[dict[str, str]]:

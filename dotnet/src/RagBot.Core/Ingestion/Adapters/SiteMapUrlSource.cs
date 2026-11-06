@@ -10,16 +10,17 @@ public sealed partial class SiteMapUrlSource(
     RobotsPolicy robots,
     Uri siteMapUrl,
     string pathPrefix,
-    int maxPages,
     ILogger<SiteMapUrlSource> logger) : IUrlSource // primary constructor (C# 12)
 {
     public async Task<IReadOnlyList<Uri>> DiscoverAsync(CancellationToken ct = default)
     {
         var html = await client.GetStringAsync(siteMapUrl, ct).ConfigureAwait(false);
         var links = StavangerHtml.ExtractLinks(html, siteMapUrl, pathPrefix);
-        var allowed = links.Where(robots.IsAllowed).ToList();
+
+        // The site map links to itself; it's only a list of links, not content worth indexing
+        var allowed = links.Where(u => u != siteMapUrl && robots.IsAllowed(u)).ToList();
         LogDiscovered(logger, links.Count, allowed.Count);
-        return allowed.Take(maxPages).ToList();
+        return allowed;
     }
 
     // [LoggerMessage] generates fast, strongly typed log methods (recommended by CA1848).

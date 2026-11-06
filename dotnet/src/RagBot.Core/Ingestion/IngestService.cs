@@ -13,10 +13,38 @@ public sealed partial class IngestService(
     IDocumentStore store,
     ILogger<IngestService> logger)
 {
-    public async Task<IngestReport> RunAsync(CancellationToken ct = default)
+    /// <param name="onlyNew">
+    /// Skip pages that are already stored. Lets an interrupted full-site crawl resume where it
+    /// stopped, but stored pages are then not checked for changes.
+    /// </param>
+    /// <param name="maxPages">
+    /// Fetch at most this many pages (null = all). Applied after onlyNew, so "--only-new
+    /// --max-pages 100" means "the next 100 pages not stored yet".
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<IngestReport> RunAsync(bool onlyNew = false, int? maxPages = null, CancellationToken ct = default)
     {
         var report = new IngestReport();
-        var urls = await source.DiscoverAsync(ct).ConfigureAwait(false);
+        IReadOnlyList<Uri> urls = await source.DiscoverAsync(ct).ConfigureAwait(false);
+        if (onlyNew)
+        {
+            var notStored = new List<Uri>();
+            foreach (var url in urls)
+            {
+                if (await store.GetAsync(url, ct).ConfigureAwait(false) is null)
+                {
+                    notStored.Add(url);
+                }
+            }
+
+            urls = notStored;
+            LogNotStored(logger, urls.Count);
+        }
+
+        if (maxPages is not null)
+        {
+            urls = urls.Take(maxPages.Value).ToList();
+        }
 
         await foreach (var document in scraper.FetchAsync(urls, ct).ConfigureAwait(false))
         {
@@ -46,6 +74,9 @@ public sealed partial class IngestService(
 
         return report;
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Count} pages not stored yet")]
+    private static partial void LogNotStored(ILogger logger, int count);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "{Status,-9}  {Url}")]
     private static partial void LogStatus(ILogger logger, string status, Uri url);
